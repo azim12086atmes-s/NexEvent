@@ -340,8 +340,68 @@ The application is stable with all major user workflows functional:
 
 ## Known Remaining Issues
 1. **Server Memory**: Dev server (Turbopack) can be unstable in sandbox - may need restarts
-2. **EventFeed competition filter**: No way to filter only competition events in the feed
-3. **Team Registration**: Students can't form/join teams for competition events from the UI yet
-4. **Competition Scoring**: No evaluator UI for scoring teams in rounds
-5. **Club Search**: No search/filter functionality on clubs view
-6. **Notification Seeding**: Demo notifications not yet seeded
+2. **Team Registration**: Students can't form/join teams for competition events from the UI yet
+3. **Competition Scoring**: No evaluator UI for scoring teams in rounds
+4. **Club Search**: No search/filter functionality on clubs view
+
+---
+
+## Session 6 Changes (Bug Fixes - Task 1)
+
+### BUG 1: Fixed ui-store.ts navigate function for selectedClubId
+- **Issue**: When navigating to `club-detail`, the `selectedClubId` logic was overly complex and buggy: `(view === 'clubs' || view === 'club-detail') && id ? id : (view === 'club-detail' ? get().selectedClubId : null)`. This didn't properly preserve the club ID when navigating within club-detail.
+- **Fix**: Simplified to `view === 'club-detail' ? (id || state.selectedClubId) : null` — when navigating to club-detail, use the provided ID or fall back to the existing selectedClubId; when navigating away, clear it.
+- **Also**: Added `previousView` field to UI store (needed for BUG 8). Store now uses `(set, get)` to access state in navigate.
+- **File**: `src/store/ui-store.ts`
+
+### BUG 2: Added search functionality sync to EventFeed
+- **Issue**: The search bar in the navbar updates `searchQuery` in the UI store, but the EventFeed only did client-side filtering without syncing to the event store's `filters.search` for server-side search.
+- **Fix**: Added `useEffect` that syncs `searchQuery` from UI store to `setFilters({ search: searchQuery })` in event store, enabling server-side search in addition to the existing client-side fallback.
+- **File**: `src/components/nexevent/EventFeed.tsx`
+
+### BUG 3: Added competition filter toggle to EventFeed
+- **Issue**: No way to filter only competition events in the feed, which was a known remaining issue.
+- **Fix**: Added `showCompetitionsOnly` state and a "Competitions" filter button with `Swords` icon in the filter bar. When active, filters events to only show `eventType === 'COMPETITION'`. The "Clear Filters" button also resets this toggle.
+- **File**: `src/components/nexevent/EventFeed.tsx`
+
+### BUG 4: Fixed ClubDetailPage to refresh clubs list after join/leave
+- **Issue**: When joining or leaving a club from ClubDetailPage, the clubs list (used by the parent ClubsView) wasn't refreshed, causing stale member counts and isMember status when navigating back.
+- **Fix**: Added `fetchClubs` to the destructured club store methods, and called `fetchClubs()` after `joinClub()` and `leaveClub()` in the handleJoin/handleLeave handlers.
+- **File**: `src/components/nexevent/ClubDetailPage.tsx`
+
+### BUG 5: Fixed CreateEventForm "none" clubId issue
+- **Issue**: When "No club" was selected in the create event form, the value "none" was sent as `clubId` to the API instead of `null`, which would fail to create the event.
+- **Fix**: Changed `clubId: form.clubId || null` to `clubId: form.clubId === 'none' ? null : (form.clubId || null)` in handleSubmit.
+- **File**: `src/components/nexevent/CreateEventForm.tsx`
+
+### BUG 6: Fixed auth-store double-read response body issue
+- **Issue**: In `login`, `register`, and `updateProfile` functions in auth-store, `res.json()` was called twice — once for error checking and once for success data. This can fail on some response bodies that can only be consumed once.
+- **Fix**: Refactored all three functions to read `res.json()` once into a variable, then check `res.ok` and use the stored data accordingly.
+- **File**: `src/store/auth-store.ts`
+
+### BUG 7: Fixed ProfileView refresh after profile update
+- **Issue**: After updating profile, the local `profile` state and auth store user object weren't properly synchronized. The `res.json()` was called after `res.ok` but before `toast.success`, and `updateProfile` was called without awaiting it.
+- **Fix**: Reordered the save handler to: 1) read response JSON, 2) update local profile state, 3) await `updateProfile(editForm)` to ensure auth store is updated, 4) show success toast. Also fixed the profile state merge to handle both `d.user` and `d` response shapes.
+- **File**: `src/components/nexevent/ProfileView.tsx`
+
+### BUG 8: Fixed EventDetail back button to remember previous view
+- **Issue**: The back button in EventDetail always navigated to 'feed', even if the user came from 'my-events', 'dashboard', or 'admin'.
+- **Fix**: Added `previousView` field to the UI store's state (set in the `navigate` function). EventDetail now reads `previousView` and navigates back to the previous view, with 'feed' as fallback. The breadcrumb label also updates contextually (e.g., "My Events", "Dashboard", "Admin").
+- **Files**: `src/store/ui-store.ts`, `src/components/nexevent/EventDetail.tsx`
+
+### BUG 9: Added notification seeding for all demo user types
+- **Issue**: Demo notifications were only seeded for organizers, so the notification bell showed 0 for students, admin, and faculty.
+- **Fix**: Expanded the notification seed data from 4 to 15 notifications covering all user types:
+  - Students: Registration confirmations, club role assignments, event reminders, welcome messages
+  - Admin: Pending approval alerts, system status updates
+  - Faculty: Event role assignments, club activity updates
+  - Organizers: Event approvals, registration notifications, pending approval warnings
+- Also directly seeded the database with the new notifications.
+- **File**: `src/app/api/seed/route.ts`
+
+### BUG 10: Fixed LandingPage auto-redirect for authenticated users
+- **Issue**: If a user was already logged in, the landing page still showed with "Get Started" and "Sign In" buttons, which is confusing.
+- **Fix**: Added a `useEffect` in LandingPage that checks `isAuthenticated` and auto-navigates to 'feed' with `fetchEvents()` if the user is logged in. This ensures authenticated users never see the landing page.
+- **File**: `src/components/nexevent/LandingPage.tsx`
+
+### Lint: All changes pass `bun run lint` with zero errors ✅

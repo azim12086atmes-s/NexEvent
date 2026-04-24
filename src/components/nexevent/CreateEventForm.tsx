@@ -183,7 +183,7 @@ export function CreateEventForm() {
         venueLat: form.venueLat ? parseFloat(form.venueLat) : null,
         venueLng: form.venueLng ? parseFloat(form.venueLng) : null,
         geoFenceRadius: form.geoFenceRadius ? parseFloat(form.geoFenceRadius) : null,
-        clubId: form.clubId || null,
+        clubId: form.clubId === 'none' ? null : (form.clubId || null),
       };
 
       // Add competition config if applicable

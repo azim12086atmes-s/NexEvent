@@ -67,7 +67,7 @@ function getTimeUntil(d: string | Date): string {
 
 export function EventDetail() {
   const { user, isAuthenticated } = useAuthStore();
-  const { navigate, selectedEventId } = useUIStore();
+  const { navigate, selectedEventId, previousView } = useUIStore();
   const { currentEvent, isLoading, fetchEventById, registerForEvent, cancelRegistration, approveEvent } = useEventStore();
   const [registering, setRegistering] = useState(false);
   const [showQR, setShowQR] = useState(false);
@@ -236,8 +236,8 @@ export function EventDetail() {
         animate={{ opacity: 1, x: 0 }}
         className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4"
       >
-        <button onClick={() => navigate('feed')} className="hover:text-foreground transition-colors flex items-center gap-1">
-          <ArrowLeft className="w-3.5 h-3.5" /> Events
+        <button onClick={() => navigate(previousView || 'feed')} className="hover:text-foreground transition-colors flex items-center gap-1">
+          <ArrowLeft className="w-3.5 h-3.5" /> {previousView === 'my-events' ? 'My Events' : previousView === 'dashboard' ? 'Dashboard' : previousView === 'admin' ? 'Admin' : 'Events'}
         </button>
         <ChevronRight className="w-3 h-3" />
         <span className="text-foreground font-medium truncate max-w-[200px]">{event.title}</span>

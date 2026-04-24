@@ -110,6 +110,14 @@ export function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
+  // Auto-redirect authenticated users to the feed
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchEvents();
+      navigate('feed');
+    }
+  }, [isAuthenticated, navigate, fetchEvents]);
+
   // Deterministic particle positions to avoid hydration mismatch
   const particlePositions = useMemo(() => [
     { top: 18, left: 12, duration: 4.2, delay: 0.3 },

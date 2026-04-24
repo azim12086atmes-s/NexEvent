@@ -128,6 +128,20 @@ export async function POST() {
       { userId: org1.id, title: 'New Registration', message: 'Aditi N has registered for HackVerse 2026.', type: 'info' },
       { userId: org2.id, title: 'Event Approved!', message: 'Your event "Swarasangama" has been approved.', type: 'success' },
       { userId: org1.id, title: 'Pending Approval', message: 'Your event "AI/ML Seminar" is awaiting faculty approval.', type: 'warning' },
+      // Notifications for students
+      { userId: students[0].id, title: 'Registration Confirmed!', message: 'You have been registered for HackVerse 2026. Don\'t forget to check in!', type: 'success' },
+      { userId: students[0].id, title: 'New Club Role', message: 'You have been assigned the "Event Coordinator" role in CodeCrafters.', type: 'info' },
+      { userId: students[2].id, title: 'Event Starting Soon', message: 'Swarasangama - Musical Night starts in 3 days. Get ready!', type: 'warning' },
+      { userId: students[4].id, title: 'Welcome to NexEvent!', message: 'Your account has been created. Explore campus events and join clubs!', type: 'info' },
+      { userId: students[9].id, title: 'Cricket Tournament Live!', message: 'VVCE Cricket Tournament is now live. Check the score updates.', type: 'info' },
+      { userId: students[11].id, title: 'Registration Confirmed!', message: 'You have been registered for Green Mysuru Cleanup Drive.', type: 'success' },
+      // Notifications for admin
+      { userId: admin.id, title: 'New Event Pending Approval', message: 'A new event "AI/ML Seminar: Future of Intelligence" needs your review.', type: 'warning' },
+      { userId: admin.id, title: 'System Status', message: 'All systems operational. 7 events and 5 clubs active on the platform.', type: 'info' },
+      // Notifications for faculty
+      { userId: faculty1.id, title: 'Event Role Assigned', message: 'You have been assigned as Judge for HackVerse 2026.', type: 'info' },
+      { userId: faculty2.id, title: 'Event Role Assigned', message: 'You have been assigned as Evaluator for Street Play Competition.', type: 'info' },
+      { userId: faculty2.id, title: 'Club Activity', message: 'Rangataranga has 4 upcoming events. Check the club page for details.', type: 'info' },
     ] });
 
     return NextResponse.json({ message: 'Database seeded successfully!', users: 20, clubs: 5, events: 7, achievements: 8, clubRoles: 3, eventRoles: 5, teams: 2 });

@@ -51,7 +51,7 @@ const ALL_PERMISSIONS = [
 export function ClubDetailPage() {
   const { user, isAuthenticated } = useAuthStore();
   const { navigate, selectedClubId } = useUIStore();
-  const { currentClub, isLoading, fetchClubById, joinClub, leaveClub, updateClubPage, createClubRole, deleteClubRole, assignClubRole, revokeClubRole, createAchievement, deleteAchievement } = useClubStore();
+  const { currentClub, isLoading, fetchClubById, fetchClubs, joinClub, leaveClub, updateClubPage, createClubRole, deleteClubRole, assignClubRole, revokeClubRole, createAchievement, deleteAchievement } = useClubStore();
   const [activeTab, setActiveTab] = useState<'about' | 'roles' | 'achievements'>('about');
   const [showEditPage, setShowEditPage] = useState(false);
   const [showCreateRole, setShowCreateRole] = useState(false);
@@ -93,13 +93,13 @@ export function ClubDetailPage() {
 
   const handleJoin = async () => {
     if (!currentClub) return;
-    try { await joinClub(currentClub.id); toast.success('Joined club! 🎉'); }
+    try { await joinClub(currentClub.id); fetchClubs(); toast.success('Joined club! 🎉'); }
     catch (e: any) { toast.error(e.message || 'Failed to join'); }
   };
 
   const handleLeave = async () => {
     if (!currentClub) return;
-    try { await leaveClub(currentClub.id); toast.success('Left club'); }
+    try { await leaveClub(currentClub.id); fetchClubs(); toast.success('Left club'); }
     catch (e: any) { toast.error(e.message || 'Failed to leave'); }
   };
 

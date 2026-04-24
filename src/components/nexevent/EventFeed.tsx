@@ -216,13 +216,22 @@ export function EventFeed() {
   const { events, filters, isLoading, fetchEvents, setFilters, clearFilters } = useEventStore();
   const [registering, setRegistering] = useState<string | null>(null);
   const [activeCategoryPill, setActiveCategoryPill] = useState<EventCategory | null>(null);
+  const [showCompetitionsOnly, setShowCompetitionsOnly] = useState(false);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  // Sync searchQuery from UI store to event store filters for server-side search
+  useEffect(() => {
+    if (filters.search !== searchQuery) {
+      setFilters({ search: searchQuery });
+    }
+  }, [searchQuery, filters.search, setFilters]);
 
   const categories: EventCategory[] = ['TECHNICAL', 'CULTURAL', 'SPORTS', 'WORKSHOP', 'SEMINAR', 'HACKATHON', 'SOCIAL', 'OTHER'];
 
   const filtered = useMemo(() => {
     let result = events;
+    // Client-side search fallback (supplements server-side search)
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(e =>
@@ -234,8 +243,12 @@ export function EventFeed() {
     }
     const cat = activeCategoryPill || filters.category;
     if (cat) result = result.filter(e => e.category === cat);
+    // Competition filter
+    if (showCompetitionsOnly) {
+      result = result.filter(e => (e as any).eventType === 'COMPETITION');
+    }
     return result;
-  }, [events, searchQuery, filters.category, activeCategoryPill]);
+  }, [events, searchQuery, filters.category, activeCategoryPill, showCompetitionsOnly]);
 
   const handleRegister = async (eventId: string) => {
     setRegistering(eventId);
@@ -359,8 +372,13 @@ export function EventFeed() {
           onClick={() => setFilters({ upcoming: !filters.upcoming })}>
           <Clock className="w-3 h-3 mr-1" /> Upcoming
         </Button>
-        {(activeCategoryPill || filters.category) && (
-          <Button variant="ghost" size="sm" onClick={() => { setActiveCategoryPill(null); clearFilters(); }}>
+        <Button variant="outline" size="sm"
+          className={showCompetitionsOnly ? 'bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700' : ''}
+          onClick={() => setShowCompetitionsOnly(!showCompetitionsOnly)}>
+          <Swords className="w-3 h-3 mr-1" /> Competitions
+        </Button>
+        {(activeCategoryPill || filters.category || showCompetitionsOnly) && (
+          <Button variant="ghost" size="sm" onClick={() => { setActiveCategoryPill(null); clearFilters(); setShowCompetitionsOnly(false); }}>
             Clear Filters
           </Button>
         )}

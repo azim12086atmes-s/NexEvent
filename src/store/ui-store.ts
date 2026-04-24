@@ -17,6 +17,7 @@ export type ViewName =
 
 interface UIState {
   currentView: ViewName;
+  previousView: ViewName | null;
   selectedEventId: string | null;
   selectedClubId: string | null;
   sidebarOpen: boolean;
@@ -34,8 +35,9 @@ interface UIState {
   closeAuthModal: () => void;
 }
 
-export const useUIStore = create<UIState>()((set) => ({
+export const useUIStore = create<UIState>()((set, get) => ({
   currentView: 'landing',
+  previousView: null,
   selectedEventId: null,
   selectedClubId: null,
   sidebarOpen: false,
@@ -45,10 +47,12 @@ export const useUIStore = create<UIState>()((set) => ({
   authMode: 'login',
 
   navigate: (view: ViewName, id?: string) => {
+    const state = get();
     set({
+      previousView: state.currentView,
       currentView: view,
       selectedEventId: view === 'event-detail' ? (id || null) : null,
-      selectedClubId: (view === 'clubs' || view === 'club-detail') && id ? id : (view === 'club-detail' ? get().selectedClubId : null),
+      selectedClubId: view === 'club-detail' ? (id || state.selectedClubId) : null,
       sidebarOpen: false,
     });
   },

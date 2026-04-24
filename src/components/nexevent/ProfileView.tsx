@@ -47,12 +47,12 @@ export function ProfileView() {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
+        const d = await res.json();
+        setProfile(prev => ({ ...prev, ...(d.user || d) }));
+        // Also update the auth store so the header/avatar reflects changes
+        await updateProfile(editForm);
         toast.success('Profile updated! ✅');
         setEditing(false);
-        const d = await res.json();
-        setProfile(prev => ({ ...prev, ...d.user }));
-        // Also update the auth store
-        updateProfile(editForm);
       }
     } catch { toast.error('Update failed'); }
     setSaving(false);

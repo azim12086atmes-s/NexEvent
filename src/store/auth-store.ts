@@ -59,12 +59,11 @@ export const useAuthStore = create<AuthState>()(
             body: JSON.stringify({ email, password }),
           });
 
+          const data: LoginResponse = await res.json();
           if (!res.ok) {
-            const data = await res.json();
-            throw new Error(data.error || 'Login failed');
+            throw new Error((data as any).error || 'Login failed');
           }
 
-          const data: LoginResponse = await res.json();
           set({
             user: data.user,
             isAuthenticated: true,
@@ -89,12 +88,11 @@ export const useAuthStore = create<AuthState>()(
             body: JSON.stringify(data),
           });
 
+          const responseData: LoginResponse = await res.json();
           if (!res.ok) {
-            const responseData = await res.json();
-            throw new Error(responseData.error || 'Registration failed');
+            throw new Error((responseData as any).error || 'Registration failed');
           }
 
-          const responseData: LoginResponse = await res.json();
           set({
             user: responseData.user,
             isAuthenticated: true,
@@ -145,14 +143,13 @@ export const useAuthStore = create<AuthState>()(
             body: JSON.stringify(data),
           });
 
+          const responseData = await res.json();
           if (!res.ok) {
-            const responseData = await res.json();
             throw new Error(responseData.error || 'Update failed');
           }
 
-          const responseData: AuthUser = await res.json();
           set({
-            user: responseData,
+            user: responseData.user || responseData,
             isLoading: false,
           });
         } catch (err) {
