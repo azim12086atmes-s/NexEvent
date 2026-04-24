@@ -110,7 +110,8 @@ export function ClubsView() {
             transition={{ delay: i * 0.06, type: 'spring', stiffness: 100 }}
             whileHover={{ y: -4 }}
           >
-            <Card className="group hover:shadow-xl hover:shadow-primary/5 transition-all duration-500 overflow-hidden border-border/50 hover:border-primary/30">
+            <Card className="group hover:shadow-xl hover:shadow-primary/5 transition-all duration-500 overflow-hidden border-border/50 hover:border-primary/30 cursor-pointer"
+              onClick={() => navigate('club-detail', club.id)}>
               {/* Gradient top bar */}
               <div className={`h-2 bg-gradient-to-r ${categoryColors[club.category] || categoryColors.OTHER}`} />
 
@@ -146,17 +147,18 @@ export function ClubsView() {
                   <div className="flex gap-2 pt-3 border-t border-border/30">
                     {isMember(club) ? (
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive text-xs flex-1"
-                        onClick={() => handleLeave(club.id)}>
+                        onClick={(e) => { e.stopPropagation(); handleLeave(club.id); }}>
                         <UserMinus className="w-3 h-3 mr-1" /> Leave
                       </Button>
                     ) : (
                       <Button size="sm" className="text-xs bg-primary hover:bg-primary/90 flex-1 shadow-md shadow-primary/10"
-                        onClick={() => handleJoin(club.id)}>
+                        onClick={(e) => { e.stopPropagation(); handleJoin(club.id); }}>
                         <UserPlus className="w-3 h-3 mr-1" /> Join Club
                       </Button>
                     )}
                     <Button variant="ghost" size="sm" className="text-xs"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         const isExpanded = expandedClub === club.id;
                         setExpandedClub(isExpanded ? null : club.id);
                         if (!isExpanded) loadClubDetail(club.id);

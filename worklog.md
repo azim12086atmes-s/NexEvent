@@ -189,3 +189,76 @@ The application is functional with all core features implemented:
 - Verified club join/leave functionality
 - Verified admin approval workflow (pending events visible)
 - Verified lint passes with zero errors
+
+---
+
+## Session 4 Changes (Club Pages, Roles & Competition System)
+
+### 18. Prisma Schema - Major Extension
+- **Club model**: Added `mission`, `vision`, `highlights` (JSON), `socialLinks` (JSON), `contactEmail`, `contactPhone` for rich club pages
+- **ClubRole model** (NEW): Custom roles within clubs with granular permissions (`EDIT_CLUB_PAGE`, `CREATE_CLUB_EVENT`, `MANAGE_MEMBERS`, `MANAGE_ROLES`, `VIEW_ANALYTICS`, `MANAGE_ACHIEVEMENTS`)
+- **ClubRoleAssignment model** (NEW): Assigns club roles to users with delegation tracking (`assignedBy` field)
+- **ClubAchievement model** (NEW): Club achievements and awards with icon, category, date
+- **Event model**: Added `eventType` field (`GENERAL` | `COMPETITION`)
+- **EventRole model** (NEW): Custom roles for events (judges, evaluators, volunteers, etc.) with permissions
+- **EventRoleAssignment model** (NEW): Assigns event roles to users with delegation tracking
+- **CompetitionConfig model** (NEW): 1:1 with Event, stores team config (min/max size, max teams, allow individual, scoring type)
+- **CompetitionRound model** (NEW): Rounds within competition with criteria (JSON), max score, weight, elimination settings
+- **Team model** (NEW): Teams for competition events with join code, leader, status
+- **TeamMember model** (NEW): Members of teams
+- **EventRegistration**: Added `teamId` field for team-based registration
+- **User model**: Added reverse relations for all new assignment/creation models
+
+### 19. API Routes - Club System
+- **Updated `/api/clubs/[id]`**: GET now includes roles (with assignments), achievements, roleAssignments; PUT for editing club
+- **Created `/api/clubs/[id]/roles`**: CRUD for club roles with `MANAGE_ROLES` permission check
+- **Created `/api/clubs/[id]/roles/assign`**: POST/DELETE for assigning/revoking roles with **delegation rule enforcement** (cannot grant permissions you don't have yourself, unless you're admin/faculty advisor)
+- **Created `/api/clubs/[id]/achievements`**: CRUD for club achievements with permission check
+- **Created `/api/clubs/[id]/page`**: PUT for updating club page content (mission, vision, highlights, etc.) with `EDIT_CLUB_PAGE` permission check
+- **Helper function `getUserClubPermissions()`**: Centralized permission resolution that checks: admin/faculty advisor → full perms, president/secretary → base perms, custom role assignments → specific perms
+
+### 20. API Routes - Competition & Event Roles
+- **Updated `/api/events/route.ts`**: POST now accepts `eventType`, `competitionConfig` (with rounds), and `eventRoles`
+- **Created `/api/events/[id]/roles`**: CRUD for event roles with organizer authorization check
+- **Created `/api/events/[id]/roles/assign`**: POST/DELETE for assigning/revoking event roles with **delegation rule** (check assigner's event role permissions)
+- **Created `/api/events/[id]/competition`**: GET/POST/DELETE for competition config with rounds
+- **Updated `/api/events/[id]/route.ts`**: GET now includes competitionConfig, eventRoles, teams; PUT accepts `eventType` updates
+
+### 21. Frontend - ClubDetailPage Component
+- Full club page with 3 tabs: About, Roles & Team, Achievements
+- **About tab**: Mission/Vision cards, highlights grid, contact/social info, members list, edit page dialog
+- **Roles tab**: Role cards showing permissions, assigned users, assign/revoke dialogs
+- **Achievements tab**: Achievement cards with icons, categories, dates; add/delete functionality
+- **Permission-based UI**: Edit/Create buttons only visible to users with appropriate permissions
+- **Delegation enforcement**: Role creation dialog shows which permissions user can/cannot grant (grayed out with warning)
+- Derived `isMember` and `userPermissions` from `useMemo` (no setState in effects - lint compliant)
+
+### 22. Frontend - CreateEventForm Enhancement
+- **Event type toggle**: Switch between GENERAL and COMPETITION
+- **Competition config**: Team size (min/max), max teams, allow individual, scoring type (Cumulative/Average/Best Of)
+- **Rounds builder**: Add/remove rounds with name, description, max score, weight, elimination toggle, advance count
+- **Scoring criteria**: Per-round criteria with name, max score, weight (e.g., Innovation: 25pts, Feasibility: 25pts)
+- **Event roles builder**: Add/remove roles (Judge, Evaluator, Volunteer, etc.) with color, description, permissions, max assignees
+- All competition config and event roles are submitted with the event creation API call
+
+### 23. Frontend - Navigation Updates
+- Added `club-detail` view to UI store's ViewName type
+- ClubsView: Clicking a club card navigates to club-detail view
+- ClubsView: Join/Leave/Members buttons use `e.stopPropagation()` to prevent card click
+- page.tsx: Added ClubDetailPage import and case in renderView
+
+### 24. Zustand Store Updates
+- **club-store.ts**: Added types (ClubRole, ClubRoleAssignment, ClubAchievement), methods (updateClubPage, createClubRole, updateClubRole, deleteClubRole, assignClubRole, revokeClubRole, createAchievement, deleteAchievement)
+
+### 25. Seed Data - Rich Demo Content
+- Club pages with mission, vision, highlights, contact email
+- 3 custom club roles (Event Coordinator, Social Media Manager, Cultural Coordinator) with assignments
+- 8 club achievements across all clubs (SIH winners, milestones, awards, competition wins)
+- 3 competition events (HackVerse, Cricket Tournament, Street Play) with full CompetitionConfig and Rounds
+- 5 event roles (Judge, Volunteer, Mentor, Evaluator) with assignments
+- 2 teams for HackVerse competition with team members
+- Seeded successfully: 20 users, 5 clubs, 7 events, 8 achievements, 3 club roles, 5 event roles, 2 teams
+
+### 26. Lint & Quality
+- Fixed `react-hooks/set-state-in-effect` in ClubDetailPage by converting `useEffect`+`setState` to `useMemo`-derived values
+- All code passes `bun run lint` with zero errors

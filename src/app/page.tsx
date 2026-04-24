@@ -18,6 +18,7 @@ import { OrganizerDashboard } from '@/components/nexevent/OrganizerDashboard';
 import { AdminPanel } from '@/components/nexevent/AdminPanel';
 import { ProfileView } from '@/components/nexevent/ProfileView';
 import { ClubsView } from '@/components/nexevent/ClubsView';
+import { ClubDetailPage } from '@/components/nexevent/ClubDetailPage';
 import { MyEvents } from '@/components/nexevent/MyEvents';
 import { CreateEventForm } from '@/components/nexevent/CreateEventForm';
 import { QRScanner } from '@/components/nexevent/QRScanner';
@@ -48,6 +49,7 @@ export default function NexEventApp() {
       case 'admin': return <AdminPanel />;
       case 'profile': return <ProfileView />;
       case 'clubs': return <ClubsView />;
+      case 'club-detail': return <ClubDetailPage />;
       case 'my-events': return <MyEvents />;
       case 'create-event': return <CreateEventForm />;
       case 'scan-qr': return <QRScanner />;

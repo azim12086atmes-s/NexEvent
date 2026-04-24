@@ -62,12 +62,21 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  clubMemberships    ClubMember[]
-  organizedEvents    Event[]       @relation("EventOrganizer")
-  approvedEvents     Event[]       @relation("EventApprover")
-  registrations      EventRegistration[]
-  attendances        Attendance[]
-  facultyClubs       Club[]       @relation("FacultyAdvisor")
+  clubMemberships       ClubMember[]
+  organizedEvents       Event[]       @relation("EventOrganizer")
+  approvedEvents        Event[]       @relation("EventApprover")
+  registrations         EventRegistration[]
+  attendances           Attendance[]
+  facultyClubs          Club[]       @relation("FacultyAdvisor")
+  clubRoleAssignments   ClubRoleAssignment[]
+  eventRoleAssignments  EventRoleAssignment[]
+  teamMemberships       TeamMember[]
+  ledTeams              Team[]       @relation("TeamLeader")
+  createdClubRoles      ClubRole[]   @relation("ClubRoleCreator")
+  createdAchievements   ClubAchievement[]
+  createdEventRoles     EventRole[]  @relation("EventRoleCreator")
+  clubRoleAssignmentsMade ClubRoleAssignment[] @relation("ClubRoleAssigner")
+  eventRoleAssignmentsMade EventRoleAssignment[] @relation("EventRoleAssigner")
 }
 
 model Club {
@@ -81,25 +90,85 @@ model Club {
   isActive        Boolean  @default(true)
   foundedYear     Int?
   facultyAdvisorId String?
+  // Club page fields
+  mission         String?   // What the club stands for
+  vision          String?   // Club vision
+  highlights      String?   // JSON string: [{title, description, icon}]
+  socialLinks     String?   // JSON string: {instagram, twitter, linkedin, website}
+  contactEmail    String?
+  contactPhone    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   facultyAdvisor  User?       @relation("FacultyAdvisor", fields: [facultyAdvisorId], references: [id])
   members         ClubMember[]
   events          Event[]
+  roles           ClubRole[]
+  achievements    ClubAchievement[]
+  roleAssignments ClubRoleAssignment[]
 }
 
 model ClubMember {
   id        String   @id @default(cuid())
   userId    String
   clubId    String
-  role      String   @default("member") // president, secretary, treasurer, member
+  role      String   @default("member") // president, secretary, treasurer, member - base role
   joinedAt  DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
   club      Club     @relation(fields: [clubId], references: [id])
 
   @@unique([userId, clubId])
+}
+
+// Custom roles within clubs with granular permissions
+model ClubRole {
+  id          String   @id @default(cuid())
+  clubId      String
+  name        String   // e.g., "Event Coordinator", "Social Media Manager"
+  description String?
+  permissions String   @default("[]") // JSON array: ["EDIT_CLUB_PAGE", "CREATE_CLUB_EVENT", "MANAGE_MEMBERS", "MANAGE_ROLES", "VIEW_ANALYTICS", "MANAGE_ACHIEVEMENTS"]
+  isDefault   Boolean  @default(false) // Whether this is a system role
+  color       String?  // Optional color for badge display
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  assignments ClubRoleAssignment[]
+  creator     User     @relation("ClubRoleCreator", fields: [createdBy], references: [id])
+}
+
+// Assigning club roles to users (with delegation tracking)
+model ClubRoleAssignment {
+  id          String   @id @default(cuid())
+  clubRoleId  String
+  userId      String
+  clubId      String
+  assignedBy  String   // Who assigned this role
+  assignedAt  DateTime @default(now())
+
+  role        ClubRole @relation(fields: [clubRoleId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  club        Club     @relation(fields: [clubId], references: [id])
+  assigner    User     @relation("ClubRoleAssigner", fields: [assignedBy], references: [id])
+
+  @@unique([clubRoleId, userId])
+}
+
+// Club achievements and awards
+model ClubAchievement {
+  id          String   @id @default(cuid())
+  clubId      String
+  title       String
+  description String?
+  date        DateTime @default(now())
+  icon        String?  // Emoji or icon name
+  category    String?  // e.g., "award", "milestone", "competition"
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  club        Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  creator     User     @relation(fields: [createdBy], references: [id])
 }
 
 model Event {
@@ -125,6 +194,8 @@ model Event {
   approverId        String?
   approvedAt        DateTime?
   rejectionReason   String?
+  // Event type extension
+  eventType         String       @default("GENERAL") // GENERAL, COMPETITION
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -135,6 +206,9 @@ model Event {
   registrations     EventRegistration[]
   attendances       Attendance[]
   report            EventReport?
+  eventRoles        EventRole[]
+  competitionConfig CompetitionConfig?
+  teams             Team[]
 }
 
 model EventRegistration {
@@ -146,6 +220,8 @@ model EventRegistration {
   registeredAt    DateTime           @default(now())
   confirmedAt     DateTime?
   cancelledAt     DateTime?
+  // Team support for competitions
+  teamId          String?
 
   event           Event              @relation(fields: [eventId], references: [id])
   user            User               @relation(fields: [userId], references: [id])
@@ -194,4 +270,98 @@ model Notification {
   isRead    Boolean  @default(false)
   link      String?
   createdAt DateTime @default(now())
+}
+
+// Custom roles for events (evaluators, judges, volunteers, etc.)
+model EventRole {
+  id           String   @id @default(cuid())
+  eventId      String
+  name         String   // e.g., "Judge", "Evaluator", "Volunteer", "Student Staff"
+  description  String?
+  permissions  String   @default("[]") // JSON array: ["SCORE_PARTICIPANTS", "VIEW_RESULTS", "MANAGE_REGISTRATIONS", "CHECK_IN_ATTENDEES", "MANAGE_EVENT_ROLES"]
+  color        String?  // Optional color for badge
+  maxAssignees Int?     // Optional limit on how many people can have this role
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  event       Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assignments EventRoleAssignment[]
+  creator     User               @relation("EventRoleCreator", fields: [createdBy], references: [id])
+}
+
+// Assigning event roles to users
+model EventRoleAssignment {
+  id          String   @id @default(cuid())
+  eventRoleId String
+  userId      String
+  assignedBy  String
+  assignedAt  DateTime @default(now())
+
+  role        EventRole @relation(fields: [eventRoleId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id])
+  assigner    User      @relation("EventRoleAssigner", fields: [assignedBy], references: [id])
+
+  @@unique([eventRoleId, userId])
+}
+
+// Competition configuration (1:1 with Event)
+model CompetitionConfig {
+  id              String   @id @default(cuid())
+  eventId         String   @unique
+  teamMinSize     Int      @default(1)   // Minimum members per team
+  teamMaxSize     Int      @default(5)   // Maximum members per team
+  maxTeams        Int?                   // Maximum number of teams (null = unlimited)
+  allowIndividual Boolean  @default(true) // Can individuals participate without a team?
+  scoringType     String   @default("CUMULATIVE") // CUMULATIVE, AVERAGE, BEST_OF
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  rounds          CompetitionRound[]
+}
+
+// Competition rounds with scoring criteria
+model CompetitionRound {
+  id                  String   @id @default(cuid())
+  competitionConfigId String
+  roundNumber         Int      // 1, 2, 3...
+  name                String   // e.g., "Prelims", "Semifinals", "Finals"
+  description         String?
+  criteria            String   @default("[]") // JSON array: [{name, description, maxScore, weight}]
+  maxScore            Float    @default(100)
+  weight              Float    @default(1.0) // Weight of this round in final score
+  isElimination       Boolean  @default(false) // Does this round eliminate teams?
+  advanceCount        Int?     // How many teams advance (if elimination)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  config              CompetitionConfig @relation(fields: [competitionConfigId], references: [id], onDelete: Cascade)
+}
+
+// Teams for competition events
+model Team {
+  id        String   @id @default(cuid())
+  eventId   String
+  name      String
+  teamCode  String   @unique // Unique join code
+  leaderId  String
+  status    String   @default("REGISTERED") // REGISTERED, CONFIRMED, ELIMINATED, WINNER
+  createdAt DateTime @default(now())
+
+  event     Event        @relation(fields: [eventId], references: [id])
+  leader    User         @relation("TeamLeader", fields: [leaderId], references: [id])
+  members   TeamMember[]
+}
+
+// Team members
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
 }

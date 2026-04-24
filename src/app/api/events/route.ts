@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
       title, description, venue, startDate, endDate, category,
       clubId, poster, maxParticipants, registrationDeadline, tags,
       venueLat, venueLng, geoFenceRadius, isPublic, requiresApproval,
+      eventType, competitionConfig,
     } = body;
 
     if (!title || !description || !venue || !startDate || !endDate || !category) {
@@ -116,6 +117,7 @@ export async function POST(request: NextRequest) {
         geoFenceRadius: geoFenceRadius || null,
         isPublic: isPublic !== false,
         requiresApproval: requiresApproval || false,
+        eventType: eventType || 'GENERAL',
         status: 'PENDING_APPROVAL',
       },
       include: {
@@ -123,6 +125,54 @@ export async function POST(request: NextRequest) {
         club: { select: { id: true, name: true } },
       },
     });
+
+    // If competition, create config + rounds
+    if (eventType === 'COMPETITION' && competitionConfig) {
+      const config = await db.competitionConfig.create({
+        data: {
+          eventId: event.id,
+          teamMinSize: competitionConfig.teamMinSize || 1,
+          teamMaxSize: competitionConfig.teamMaxSize || 5,
+          maxTeams: competitionConfig.maxTeams || null,
+          allowIndividual: competitionConfig.allowIndividual !== false,
+          scoringType: competitionConfig.scoringType || 'CUMULATIVE',
+        },
+      });
+      if (competitionConfig.rounds && Array.isArray(competitionConfig.rounds)) {
+        for (const round of competitionConfig.rounds) {
+          await db.competitionRound.create({
+            data: {
+              competitionConfigId: config.id,
+              roundNumber: round.roundNumber,
+              name: round.name,
+              description: round.description || null,
+              criteria: JSON.stringify(round.criteria || []),
+              maxScore: round.maxScore ?? 100,
+              weight: round.weight ?? 1.0,
+              isElimination: round.isElimination ?? false,
+              advanceCount: round.advanceCount ?? null,
+            },
+          });
+        }
+      }
+    }
+
+    // If eventRoles provided, create them
+    if (body.eventRoles && Array.isArray(body.eventRoles)) {
+      for (const er of body.eventRoles) {
+        await db.eventRole.create({
+          data: {
+            eventId: event.id,
+            name: er.name,
+            description: er.description || null,
+            permissions: JSON.stringify(er.permissions || []),
+            color: er.color || null,
+            maxAssignees: er.maxAssignees || null,
+            createdBy: userId,
+          },
+        });
+      }
+    }
 
     return NextResponse.json({ event, message: 'Event created successfully, pending approval' }, { status: 201 });
   } catch (error) {

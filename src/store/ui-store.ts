@@ -8,6 +8,7 @@ export type ViewName =
   | 'admin'
   | 'profile'
   | 'clubs'
+  | 'club-detail'
   | 'my-events'
   | 'create-event'
   | 'scan-qr'
@@ -47,7 +48,7 @@ export const useUIStore = create<UIState>()((set) => ({
     set({
       currentView: view,
       selectedEventId: view === 'event-detail' ? (id || null) : null,
-      selectedClubId: view === 'clubs' && id ? id : null,
+      selectedClubId: (view === 'clubs' || view === 'club-detail') && id ? id : (view === 'club-detail' ? get().selectedClubId : null),
       sidebarOpen: false,
     });
   },

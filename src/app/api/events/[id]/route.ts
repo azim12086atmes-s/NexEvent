@@ -29,6 +29,22 @@ export async function GET(
         },
         report: true,
         _count: { select: { registrations: true, attendances: true } },
+        competitionConfig: {
+          include: { rounds: { orderBy: { roundNumber: 'asc' } } },
+        },
+        eventRoles: {
+          include: {
+            assignments: {
+              include: { user: { select: { id: true, name: true, email: true, avatar: true } } },
+            },
+          },
+        },
+        teams: {
+          include: {
+            leader: { select: { id: true, name: true } },
+            members: { include: { user: { select: { id: true, name: true } } } },
+          },
+        },
       },
     });
 
@@ -76,7 +92,7 @@ export async function PUT(
     }
 
     const updateData: any = {};
-    const allowedFields = ['title', 'description', 'venue', 'category', 'poster', 'maxParticipants', 'tags', 'isPublic', 'requiresApproval'];
+    const allowedFields = ['title', 'description', 'venue', 'category', 'poster', 'maxParticipants', 'tags', 'isPublic', 'requiresApproval', 'eventType'];
     for (const field of allowedFields) {
       if (body[field] !== undefined) updateData[field] = body[field];
     }
