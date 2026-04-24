@@ -262,3 +262,86 @@ The application is functional with all core features implemented:
 ### 26. Lint & Quality
 - Fixed `react-hooks/set-state-in-effect` in ClubDetailPage by converting `useEffect`+`setState` to `useMemo`-derived values
 - All code passes `bun run lint` with zero errors
+
+---
+
+## Session 5 Changes (Systematic QA & Bug Fixes)
+
+### 27. Systematic Testing - All Workflows Tested
+Tested via agent-browser with all 4 user roles (Admin, Faculty, Organizer, Student):
+- ✅ Landing Page - loads without errors
+- ✅ Auth Modal - quick login buttons work for all roles
+- ✅ Event Feed - shows all events with category pills
+- ✅ Event Detail - shows event info, registration works, QR code appears
+- ✅ Club List - shows all clubs with member counts
+- ✅ Club Detail - tabs (About, Roles & Team, Achievements) all work
+- ✅ Admin Panel - shows pending approvals, approve/reject work
+- ✅ My Events - shows registered events with QR access
+- ✅ Profile View - shows user info with edit capability
+- ✅ QR Scanner - shows manual input form
+- ✅ Create Event - form with competition toggle and event roles
+
+### 28. BUG FIX: Club Join/Leave Button Never Updates (Critical)
+- **Issue**: Clubs list API (`GET /api/clubs`) didn't include `members` array, only `_count`. The `isMember()` check in ClubsView always returned false, so "Join Club" button never changed to "Leave" after joining.
+- **Root Cause**: `db.club.findMany()` only included `facultyAdvisor` and `_count`, not `members`
+- **Fix 1**: Added `members: { select: { id: true, userId: true, role: true, user: { select: { id: true, name: true } } } }` to clubs list API include
+- **Fix 2**: Added `fetchClubs()` call after join/leave in ClubsView to refresh the member data
+- **Files**: `src/app/api/clubs/route.ts`, `src/components/nexevent/ClubsView.tsx`
+- **Result**: After joining a club, button immediately shows "Leave" with fresh member data
+
+### 29. BUG FIX: EventDetail Missing Competition Display (Critical)
+- **Issue**: EventDetail component didn't render competition config, event roles, or teams data even though the API returned them
+- **Root Cause**: No UI sections were added for these new data relations
+- **Fix**: Added 3 new sections to EventDetail:
+  - **Competition Details Card**: Shows team size, max teams, scoring type, individual participation with icon cards
+  - **Rounds Section**: Displays each round with name, max score, weight, elimination flag, advance count, and scoring criteria badges
+  - **Teams Section**: Shows registered teams with leader, member count, and status badges
+  - **Event Roles Card**: Shows all event roles with color dots, descriptions, assigned user avatars, and fill count
+  - **Competition Badge**: Added "⚔ Competition" badge in hero banner for competition events
+- **File**: `src/components/nexevent/EventDetail.tsx`
+- **Result**: Competition events now show full configuration, rounds, teams, and event roles
+
+### 30. BUG FIX: Competition Badge in Event Feed
+- **Issue**: Event feed cards didn't indicate which events are competitions
+- **Fix**: Added `Swords` icon import and "⚔ Competition" badge for `eventType === 'COMPETITION'` events
+- **File**: `src/components/nexevent/EventFeed.tsx`
+
+### 31. BUG FIX: Admin Panel Not Showing All Events (High)
+- **Issue**: Admin panel's "All Events" list only showed APPROVED/LIVE/COMPLETED events because the events API filtered by default status
+- **Root Cause**: `GET /api/events?status=` with empty status triggered the default filter `{ in: ['APPROVED', 'LIVE', 'COMPLETED'] }`
+- **Fix 1**: Added special `status=ALL` value to events API that removes status filter entirely (shows all statuses including PENDING_APPROVAL, REJECTED, DRAFT)
+- **Fix 2**: Updated AdminPanel to use `status=ALL&limit=50` for the all-events query
+- **Files**: `src/app/api/events/route.ts`, `src/components/nexevent/AdminPanel.tsx`
+- **Result**: Admin panel now shows all 7 events including recently approved ones
+
+### 32. BUG FIX: DialogContent Missing Description Warning
+- **Issue**: MyEvents.tsx QR dialog had `<DialogContent>` without `aria-describedby={undefined}`, causing accessibility console warning
+- **Fix**: Added `aria-describedby={undefined}` to the DialogContent
+- **File**: `src/components/nexevent/MyEvents.tsx`
+- **Result**: Zero DialogContent warnings in console
+
+### 33. Verified All API Endpoints
+- `GET /api/clubs` → 200, includes members array ✅
+- `GET /api/events?status=ALL&limit=50` → 200, returns all 7 events with all statuses ✅
+- Competition events properly return `eventType: "COMPETITION"` ✅
+- Lint passes with zero errors ✅
+
+---
+
+## Current State Assessment (Post-QA)
+The application is stable with all major user workflows functional:
+- **Authentication**: ✅ All 4 demo roles work (Admin, Faculty, Organizer, Student)
+- **Event Lifecycle**: ✅ Create → Pending → Approved → Live → Completed
+- **Event Registration**: ✅ Register, show QR, cancel registration
+- **Club Management**: ✅ Join/Leave with proper UI updates, Club detail with roles/achievements
+- **Admin Workflow**: ✅ Approve/reject events, see all events with status filter
+- **Competition Events**: ✅ Create with rounds/criteria, view config/teams/roles in detail
+- **Competition Display**: ✅ Competition badge in feed, full config in detail view
+
+## Known Remaining Issues
+1. **Server Memory**: Dev server (Turbopack) can be unstable in sandbox - may need restarts
+2. **EventFeed competition filter**: No way to filter only competition events in the feed
+3. **Team Registration**: Students can't form/join teams for competition events from the UI yet
+4. **Competition Scoring**: No evaluator UI for scoring teams in rounds
+5. **Club Search**: No search/filter functionality on clubs view
+6. **Notification Seeding**: Demo notifications not yet seeded

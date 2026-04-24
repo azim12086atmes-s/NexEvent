@@ -8,7 +8,7 @@ import { useEventStore, EventCategory } from '@/store/event-store';
 import {
   Calendar, MapPin, Clock, Users, Filter, Search,
   Sparkles, Zap, Loader2, ArrowUpRight, TrendingUp,
-  Radio, Timer, Hash, Flame
+  Radio, Timer, Hash, Flame, Swords
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -129,6 +129,11 @@ function EventCard({ event, index, onRegister, registering, isFeatured }: {
               {isTrending && (
                 <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
                   <Flame className="w-2.5 h-2.5 mr-0.5" /> Trending
+                </Badge>
+              )}
+              {(event as any).eventType === 'COMPETITION' && (
+                <Badge className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+                  <Swords className="w-2.5 h-2.5 mr-0.5" /> Competition
                 </Badge>
               )}
             </div>

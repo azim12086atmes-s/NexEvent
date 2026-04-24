@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
       where: { isActive: true },
       include: {
         facultyAdvisor: { select: { id: true, name: true, email: true } },
+        members: { select: { id: true, userId: true, role: true, user: { select: { id: true, name: true } } } },
         _count: { select: { members: true, events: true } },
       },
       orderBy: { name: 'asc' },

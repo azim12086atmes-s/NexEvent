@@ -42,12 +42,12 @@ export function ClubsView() {
   };
 
   const handleJoin = async (clubId: string) => {
-    try { await joinClub(clubId); toast.success('Joined club! 🎉'); }
+    try { await joinClub(clubId); toast.success('Joined club! 🎉'); fetchClubs(); }
     catch (e: any) { toast.error(e.message || 'Failed to join'); }
   };
 
   const handleLeave = async (clubId: string) => {
-    try { await leaveClub(clubId); toast.success('Left club'); }
+    try { await leaveClub(clubId); toast.success('Left club'); fetchClubs(); }
     catch (e: any) { toast.error(e.message || 'Failed to leave'); }
   };
 

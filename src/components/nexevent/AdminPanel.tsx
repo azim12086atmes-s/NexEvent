@@ -47,7 +47,7 @@ export function AdminPanel() {
       try {
         const [pendingRes, allRes, statsRes] = await Promise.all([
           fetch(`/api/events?status=PENDING_APPROVAL&userId=${user.id}`),
-          fetch(`/api/events?status=&userId=${user.id}`),
+          fetch(`/api/events?status=ALL&userId=${user.id}&limit=50`),
           fetch(`/api/stats?userId=${user.id}`),
         ]);
         if (pendingRes.ok) { const d = await pendingRes.json(); setPendingEvents(d.events || []); }

@@ -9,7 +9,8 @@ import {
   ArrowLeft, Calendar, MapPin, Clock, Users, Share2,
   QrCode, CheckCircle2, XCircle, Loader2, Tag, Building2,
   FileText, Download, ExternalLink, User as UserIcon,
-  Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame
+  Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame,
+  Swords, Trophy, Layers, Target, Shield, UsersRound
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -273,6 +274,11 @@ export function EventDetail() {
               {event.status}
             </Badge>
             <Badge variant="outline" className="text-xs border-white/30 text-white/80">{event.category}</Badge>
+            {event.eventType === 'COMPETITION' && (
+              <Badge className="text-xs bg-white/20 text-white border-white/30 backdrop-blur-sm">
+                <Swords className="w-2.5 h-2.5 mr-1" /> Competition
+              </Badge>
+            )}
             {event.status === 'LIVE' || event.status === 'APPROVED' ? (
               <Badge className="text-xs bg-white/10 text-white/70 border-white/20 backdrop-blur-sm">
                 <Timer className="w-2.5 h-2.5 mr-1" /> {getTimeUntil(event.startDate)}
@@ -404,6 +410,141 @@ export function EventDetail() {
                   </Badge>
                 </motion.div>
               ))}
+            </motion.div>
+          )}
+
+          {/* Competition Config */}
+          {event.eventType === 'COMPETITION' && event.competitionConfig && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+              <Card className="border-primary/20 bg-primary/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Swords className="w-4 h-4 text-primary" /> Competition Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="text-center p-3 rounded-xl bg-background">
+                      <UsersRound className="w-4 h-4 text-primary mx-auto mb-1" />
+                      <p className="text-lg font-bold">{event.competitionConfig.teamMinSize}-{event.competitionConfig.teamMaxSize}</p>
+                      <p className="text-[10px] text-muted-foreground">Team Size</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-background">
+                      <Trophy className="w-4 h-4 text-amber-500 mx-auto mb-1" />
+                      <p className="text-lg font-bold">{event.competitionConfig.maxTeams || '∞'}</p>
+                      <p className="text-[10px] text-muted-foreground">Max Teams</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-background">
+                      <Target className="w-4 h-4 text-chart-2 mx-auto mb-1" />
+                      <p className="text-lg font-bold text-xs">{event.competitionConfig.scoringType}</p>
+                      <p className="text-[10px] text-muted-foreground">Scoring</p>
+                    </div>
+                    <div className="text-center p-3 rounded-xl bg-background">
+                      <Users className="w-4 h-4 text-chart-4 mx-auto mb-1" />
+                      <p className="text-lg font-bold">{event.competitionConfig.allowIndividual ? 'Yes' : 'No'}</p>
+                      <p className="text-[10px] text-muted-foreground">Individuals</p>
+                    </div>
+                  </div>
+
+                  {/* Rounds */}
+                  {event.competitionConfig.rounds && event.competitionConfig.rounds.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium flex items-center gap-1"><Layers className="w-3.5 h-3.5 text-primary" /> Rounds</p>
+                      {event.competitionConfig.rounds.map((round: any, ri: number) => {
+                        const criteria: { name: string; maxScore: number; weight: number }[] = (() => { try { return JSON.parse(round.criteria || '[]'); } catch { return []; } })();
+                        return (
+                          <div key={round.id} className="p-3 rounded-lg border border-border/50 bg-background">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{ri + 1}</span>
+                                <span className="text-sm font-medium">{round.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[10px]">Max: {round.maxScore}</Badge>
+                                <Badge variant="outline" className="text-[10px]">Weight: {round.weight}x</Badge>
+                                {round.isElimination && <Badge className="text-[10px] bg-rose-100 text-rose-700">Elimination</Badge>}
+                              </div>
+                            </div>
+                            {round.description && <p className="text-xs text-muted-foreground ml-8">{round.description}</p>}
+                            {round.isElimination && round.advanceCount && (
+                              <p className="text-[10px] text-rose-600 ml-8 mt-1">Top {round.advanceCount} teams advance</p>
+                            )}
+                            {criteria.length > 0 && (
+                              <div className="ml-8 mt-2 flex flex-wrap gap-1.5">
+                                {criteria.map((c: any, ci: number) => (
+                                  <Badge key={ci} variant="secondary" className="text-[9px]">
+                                    <Target className="w-2.5 h-2.5 mr-0.5" />{c.name}: {c.maxScore}pts
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Teams */}
+                  {event.teams && event.teams.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium flex items-center gap-1"><UsersRound className="w-3.5 h-3.5 text-primary" /> Registered Teams ({event.teams.length})</p>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        {event.teams.map((team: any) => (
+                          <div key={team.id} className="p-2.5 rounded-lg border border-border/50 bg-background flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium">{team.name}</p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Leader: {team.leader?.name || 'Unknown'} • {team.members?.length || 0} members
+                              </p>
+                            </div>
+                            <Badge variant={team.status === 'WINNER' ? 'default' : 'outline'} className="text-[10px]">
+                              {team.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Event Roles */}
+          {event.eventRoles && event.eventRoles.length > 0 && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" /> Event Roles
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {event.eventRoles.map((role: any) => (
+                      <div key={role.id} className="flex items-center gap-2 p-2 rounded-lg border border-border/50 bg-muted/30">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: role.color || '#6366f1' }} />
+                        <div>
+                          <p className="text-xs font-medium">{role.name}</p>
+                          {role.description && <p className="text-[10px] text-muted-foreground">{role.description}</p>}
+                        </div>
+                        {role.assignments && role.assignments.length > 0 && (
+                          <div className="flex -space-x-1 ml-1">
+                            {role.assignments.map((a: any) => (
+                              <div key={a.id} className="w-6 h-6 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center text-[8px] font-semibold text-primary" title={a.user?.name}>
+                                {(a.user?.name || '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {role.maxAssignees && (
+                          <Badge variant="outline" className="text-[9px]">{role.assignments?.length || 0}/{role.maxAssignees}</Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </motion.div>
           )}
 

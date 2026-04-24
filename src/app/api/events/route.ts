@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     const where: any = {};
 
     if (category) where.category = category;
-    if (status) where.status = status;
-    else where.status = { in: ['APPROVED', 'LIVE', 'COMPLETED'] };
+    if (status && status !== 'ALL') where.status = status;
+    else if (!status) where.status = { in: ['APPROVED', 'LIVE', 'COMPLETED'] };
     if (clubId) where.clubId = clubId;
     if (search) {
       where.OR = [

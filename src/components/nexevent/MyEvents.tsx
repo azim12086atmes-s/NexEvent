@@ -110,7 +110,7 @@ export function MyEvents() {
 
       {/* QR Dialog */}
       <Dialog open={!!qrDialog} onOpenChange={() => setQrDialog(null)}>
-        <DialogContent className="sm:max-w-xs">
+        <DialogContent className="sm:max-w-xs" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="text-center">Your Check-in QR</DialogTitle>
           </DialogHeader>
