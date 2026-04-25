@@ -90,6 +90,7 @@ export function EventDetail() {
   const { currentEvent, isLoading, fetchEventById, registerForEvent, cancelRegistration, approveEvent } = useEventStore();
   const [registering, setRegistering] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [copiedQRCode, setCopiedQRCode] = useState(false);
   const [userReg, setUserReg] = useState<any>(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [liked, setLiked] = useState(false);
@@ -1286,6 +1287,24 @@ export function EventDetail() {
                             <QRCodeSVG value={userReg.qrCode} size={160} />
                             <p className="text-[10px] text-gray-500 mt-3">Scan at venue to check in</p>
                             <p className="text-[9px] text-gray-400">Geo-fencing may apply</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 w-full"
+                              onClick={() => {
+                                navigator.clipboard.writeText(userReg.qrCode);
+                                setCopiedQRCode(true);
+                                toast.success('QR code copied!');
+                                setTimeout(() => setCopiedQRCode(false), 2000);
+                              }}
+                            >
+                              {copiedQRCode ? (
+                                <><CheckCircle2 className="w-3 h-3 mr-1.5 text-emerald-500" /> Copied!</>
+                              ) : (
+                                <><Copy className="w-3 h-3 mr-1.5" /> Copy Code</>
+                              )}
+                            </Button>
+                            <p className="text-[9px] text-gray-400 mt-1.5 font-mono break-all max-w-[220px]">{userReg.qrCode}</p>
                           </motion.div>
                         )}
                       </AnimatePresence>

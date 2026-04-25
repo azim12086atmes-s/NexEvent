@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
-import { Calendar, MapPin, Clock, Users, CheckCircle2, XCircle, QrCode, Loader2 } from 'lucide-react';
+import { Calendar, MapPin, Clock, Users, CheckCircle2, XCircle, QrCode, Loader2, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ export function MyEvents() {
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [qrDialog, setQrDialog] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -109,7 +110,7 @@ export function MyEvents() {
       )}
 
       {/* QR Dialog */}
-      <Dialog open={!!qrDialog} onOpenChange={() => setQrDialog(null)}>
+      <Dialog open={!!qrDialog} onOpenChange={() => { setQrDialog(null); setCopiedCode(false); }}>
         <DialogContent className="sm:max-w-xs" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="text-center">Your Check-in QR</DialogTitle>
@@ -119,11 +120,38 @@ export function MyEvents() {
               const reg = registrations.find(r => r.id === qrDialog);
               return reg?.qrCode ? (
                 <>
-                  <div className="bg-white p-4 rounded-xl">
+                  <div className="bg-white p-4 rounded-xl shadow-sm">
                     <QRCodeSVG value={reg.qrCode} size={180} />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-3 text-center">{reg.event.title}</p>
-                  <p className="text-[10px] text-muted-foreground">Show this at the venue entrance</p>
+                  <div className="mt-3 text-center">
+                    <p className="font-semibold text-sm">{reg.event.title}</p>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <Badge className={`text-[10px] ${statusColors[reg.status]}`}>{reg.status}</Badge>
+                      {reg.attendance && (
+                        <Badge className="text-[10px] bg-emerald-100 text-emerald-700">
+                          <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> Checked in
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">Show this at the venue entrance</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => {
+                      navigator.clipboard.writeText(reg.qrCode);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                  >
+                    {copiedCode ? (
+                      <><Check className="w-3 h-3 mr-1.5 text-emerald-500" /> Copied!</>
+                    ) : (
+                      <><Copy className="w-3 h-3 mr-1.5" /> Copy Code</>
+                    )}
+                  </Button>
+                  <p className="text-[9px] text-muted-foreground mt-2 font-mono break-all max-w-[250px]">{reg.qrCode}</p>
                 </>
               ) : null;
             })()}

@@ -104,6 +104,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title, description, venue, start/end dates, and category are required' }, { status: 400 });
     }
 
+    // Validate faculty club membership - faculty can only create events for clubs they belong to
+    if (user.role === 'FACULTY' && clubId) {
+      const allowedClub = await db.club.findFirst({
+        where: {
+          id: clubId,
+          OR: [
+            { facultyAdvisorId: userId },
+            { members: { some: { userId } } },
+          ],
+        },
+      });
+      if (!allowedClub) {
+        return NextResponse.json({ error: 'You can only create events for clubs you are a faculty advisor or member of' }, { status: 403 });
+      }
+    }
+
     const slug = generateSlug(title);
 
     const event = await db.event.create({

@@ -66,7 +66,6 @@ export function CreateEventForm() {
   const { user } = useAuthStore();
   const { navigate } = useUIStore();
   const { createEvent, isCreating } = useEventStore();
-  const [clubs, setClubs] = useState<any[]>([]);
   const [form, setForm] = useState({
     title: '', description: '', category: 'TECHNICAL' as EventCategory,
     venue: '', startDate: '', endDate: '', registrationDeadline: '',
@@ -96,9 +95,32 @@ export function CreateEventForm() {
   const [showCompetition, setShowCompetition] = useState(false);
   const [showEventRoles, setShowEventRoles] = useState(false);
 
+  const [allClubs, setAllClubs] = useState<any[]>([]);
+
   React.useEffect(() => {
-    fetch('/api/clubs').then(r => r.json()).then(d => setClubs(d.clubs || [])).catch(() => {});
+    fetch('/api/clubs').then(r => r.json()).then(d => setAllClubs(d.clubs || [])).catch(() => {});
   }, []);
+
+  // Filter clubs based on user role
+  const clubs = React.useMemo(() => {
+    if (!user) return [];
+    // ADMIN and HOD can see all clubs
+    if (user.role === 'ADMIN' || user.role === 'HOD') return allClubs;
+    // FACULTY can only see clubs they're a faculty advisor or member of
+    if (user.role === 'FACULTY') {
+      return allClubs.filter((c: any) =>
+        c.facultyAdvisorId === user.id || (c.members && c.members.some((m: any) => m.userId === user.id))
+      );
+    }
+    return allClubs;
+  }, [allClubs, user]);
+
+  // Auto-select club if faculty only belongs to one
+  React.useEffect(() => {
+    if (user?.role === 'FACULTY' && clubs.length === 1 && !form.clubId) {
+      setForm(prev => ({ ...prev, clubId: clubs[0].id }));
+    }
+  }, [clubs, user?.role, form.clubId]);
 
   const addRound = () => {
     const num = competitionConfig.rounds.length + 1;
@@ -256,14 +278,30 @@ export function CreateEventForm() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Club</Label>
-                  <Select value={form.clubId} onValueChange={(v) => setForm({ ...form, clubId: v })}>
-                    <SelectTrigger className="h-9"><SelectValue placeholder="Select club" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No club</SelectItem>
-                      {clubs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs font-medium">Club</Label>
+                    {user?.role === 'FACULTY' && clubs.length > 0 && (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">
+                        Only your clubs are shown
+                      </Badge>
+                    )}
+                  </div>
+                  {user?.role === 'FACULTY' && clubs.length === 0 ? (
+                    <div className="rounded-md border border-dashed p-3 text-center">
+                      <Building2 className="w-5 h-5 text-muted-foreground/40 mx-auto mb-1.5" />
+                      <p className="text-xs text-muted-foreground">
+                        You can only create events for clubs you\'re a faculty advisor or member of. Join a club first.
+                      </p>
+                    </div>
+                  ) : (
+                    <Select value={form.clubId} onValueChange={(v) => setForm({ ...form, clubId: v })}>
+                      <SelectTrigger className="h-9"><SelectValue placeholder="Select club" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No club</SelectItem>
+                        {clubs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               <div className="space-y-1.5">

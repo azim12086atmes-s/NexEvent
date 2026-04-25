@@ -10,10 +10,10 @@ export async function POST(
     const { id } = await params;
     const body = await request.json();
     const { qrCode, latitude, longitude } = body;
-    const userId = body.userId;
+    const scannerUserId = body.userId;
 
-    if (!userId || !qrCode) {
-      return NextResponse.json({ error: 'User ID and QR code are required' }, { status: 400 });
+    if (!scannerUserId || !qrCode) {
+      return NextResponse.json({ error: 'Scanner user ID and QR code are required' }, { status: 400 });
     }
 
     const event = await db.event.findUnique({ where: { id } });
@@ -25,21 +25,55 @@ export async function POST(
       return NextResponse.json({ error: 'Event is not active for check-in' }, { status: 400 });
     }
 
-    const registration = await db.eventRegistration.findUnique({
-      where: { eventId_userId: { eventId: id, userId } },
+    // Verify scanner has permission (faculty/HOD/admin or event role with CHECK_IN_ATTENDEES)
+    const scanner = await db.user.findUnique({ where: { id: scannerUserId } });
+    if (!scanner) {
+      return NextResponse.json({ error: 'Scanner user not found' }, { status: 401 });
+    }
+
+    const hasBasePermission = ['FACULTY', 'HOD', 'ADMIN'].includes(scanner.role);
+    let hasEventRolePermission = false;
+
+    if (!hasBasePermission) {
+      // Check if scanner has an event role with CHECK_IN_ATTENDEES permission
+      const scannerAssignments = await db.eventRoleAssignment.findMany({
+        where: { userId: scannerUserId },
+        include: { role: { where: { eventId: id } } },
+      });
+
+      for (const assignment of scannerAssignments) {
+        if (assignment.role) {
+          try {
+            const perms: string[] = JSON.parse(assignment.role.permissions || '[]');
+            if (perms.includes('CHECK_IN_ATTENDEES')) {
+              hasEventRolePermission = true;
+              break;
+            }
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    }
+
+    if (!hasBasePermission && !hasEventRolePermission) {
+      return NextResponse.json({ error: 'You do not have permission to check in attendees' }, { status: 403 });
+    }
+
+    // Find the registration by QR code for this event (FIX: was using scanner's userId before)
+    const registration = await db.eventRegistration.findFirst({
+      where: { eventId: id, qrCode: qrCode },
+      include: { user: { select: { id: true, name: true, email: true, usn: true, department: true } } },
     });
 
     if (!registration) {
-      return NextResponse.json({ error: 'Not registered for this event' }, { status: 404 });
+      return NextResponse.json({ error: 'Invalid QR code for this event' }, { status: 404 });
     }
 
     if (registration.status === 'CANCELLED') {
       return NextResponse.json({ error: 'Registration has been cancelled' }, { status: 400 });
     }
 
-    if (registration.qrCode !== qrCode) {
-      return NextResponse.json({ error: 'Invalid QR code' }, { status: 400 });
-    }
+    // The student who registered
+    const studentUserId = registration.userId;
 
     // Check if already checked in
     const existingAttendance = await db.attendance.findUnique({
@@ -50,6 +84,7 @@ export async function POST(
       return NextResponse.json({
         error: 'Already checked in',
         attendance: existingAttendance,
+        student: registration.user,
       }, { status: 409 });
     }
 
@@ -72,7 +107,7 @@ export async function POST(
       data: {
         registrationId: registration.id,
         eventId: id,
-        userId,
+        userId: studentUserId, // FIX: use student's ID, not scanner's
         status: isLate ? 'LATE' : 'PRESENT',
         checkInTime: now,
         checkInLat: latitude || null,
@@ -87,15 +122,15 @@ export async function POST(
     if (event.aictePoints && event.aictePoints > 0) {
       try {
         await db.user.update({
-          where: { id: userId },
+          where: { id: studentUserId }, // FIX: award points to student, not scanner
           data: { aictePoints: { increment: event.aictePoints } },
         });
         aictePointsAwarded = event.aictePoints;
 
-        // Notify user about AICTE points
+        // Notify student about AICTE points
         await db.notification.create({
           data: {
-            userId,
+            userId: studentUserId, // FIX: notify student, not scanner
             title: 'AICTE Points Awarded! 🏆',
             message: `You earned ${event.aictePoints} AICTE points for attending "${event.title}"`,
             type: 'success',
@@ -109,6 +144,7 @@ export async function POST(
 
     return NextResponse.json({
       attendance,
+      student: registration.user,
       aictePointsAwarded,
       message: isWithinFence
         ? (isLate ? 'Checked in (Late)' : 'Checked in successfully')
@@ -128,10 +164,11 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+    const recent = searchParams.get('recent');
 
     // If userId is provided, return only that user's attendance record
     // This is used by students to check their own attendance
-    if (userId) {
+    if (userId && !recent) {
       const attendance = await db.attendance.findFirst({
         where: { eventId: id, userId },
         include: {
@@ -152,12 +189,16 @@ export async function GET(
     }
 
     // Otherwise return all attendances (organizer view)
+    // Support ?recent=N to get last N check-ins
+    const limit = recent ? parseInt(recent) || 10 : undefined;
+
     const attendances = await db.attendance.findMany({
       where: { eventId: id },
       include: {
         user: { select: { id: true, name: true, email: true, usn: true, department: true } },
       },
-      orderBy: { checkInTime: 'asc' },
+      orderBy: { checkInTime: 'desc' },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json({ attendances });

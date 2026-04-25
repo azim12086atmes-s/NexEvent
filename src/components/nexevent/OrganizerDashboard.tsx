@@ -568,6 +568,83 @@ export function OrganizerDashboard() {
         ))}
       </div>
 
+      {/* My Clubs Section */}
+      {user && (() => {
+        const myClubs = clubs.filter((c: any) =>
+          c.facultyAdvisorId === user.id || c.members?.some((m: any) => m.userId === user.id)
+        );
+        return myClubs.length > 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mb-8"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-primary" /> My Clubs
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => navigate('clubs')}
+              >
+                All Clubs <ArrowRight className="w-3 h-3 ml-1" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {myClubs.map((club: any, i: number) => {
+                const isAdvisor = club.facultyAdvisorId === user.id;
+                const memberCount = club._count?.members || club.members?.length || 0;
+                const eventCount = club._count?.events || 0;
+                return (
+                  <motion.div
+                    key={club.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    whileHover={{ y: -3 }}
+                  >
+                    <Card
+                      className="cursor-pointer hover:shadow-md transition-all border-border/50 hover:border-primary/20"
+                      onClick={() => navigate('club-detail', club.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3 mb-3">
+                          <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-primary/80 to-primary/60 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                            {club.name.charAt(0)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h3 className="font-medium text-sm truncate">{club.name}</h3>
+                              {isAdvisor && (
+                                <Badge className="text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 shrink-0">
+                                  <Crown className="w-2.5 h-2.5 mr-0.5" /> Advisor
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground line-clamp-1">{club.description}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5" /> {memberCount} members
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" /> {eventCount} events
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null;
+      })()}
+
       {/* Registration overview */}
       {events.length > 0 && (
         <motion.div

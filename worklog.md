@@ -990,3 +990,155 @@ All accounts use password `demo123`:
 - guest@vvce.ac.in → OTHER ✅
 
 ### Lint Status: ✅ Zero errors
+
+---
+Task ID: 2
+Agent: full-stack-developer
+Task: Restrict faculty to only create events for their own clubs
+
+Work Log:
+- Updated CreateEventForm to store all clubs in `allClubs` state and derive filtered `clubs` via `useMemo`
+- Added client-side filtering: FACULTY users only see clubs where they are facultyAdvisor or member; ADMIN/HOD see all
+- Added auto-select logic: if FACULTY belongs to exactly one club, it's pre-selected as default
+- Added "Only your clubs are shown" info Badge next to the Club label for faculty users
+- Added empty state with Building2 icon and helpful message when faculty has no clubs
+- Updated Events API POST to validate faculty club membership server-side
+- Added Prisma query checking `club.facultyAdvisorId === userId` or `club.members.some({ userId })` for FACULTY role
+- Returns 403 if faculty tries to create event for a club they don't belong to
+- ADMIN and HOD bypass the club membership check
+- Preserved "No club" option (clubId = 'none' → null) in the form
+- All changes pass `bun run lint` with zero errors
+
+Stage Summary:
+- Faculty users now see only clubs they're faculty advisor or member of in CreateEventForm
+- Faculty with exactly one club gets it auto-selected
+- Info badge "Only your clubs are shown" appears for faculty
+- Empty state message shown when faculty has no clubs
+- Server-side validation prevents faculty from creating events for unauthorized clubs (403 error)
+- ADMIN and HOD retain full access to all clubs
+
+---
+
+## Session 10 Changes (QR Code Logic Fix - Task ID: 4)
+
+### Task ID: 4 - Make QR code logic fully functional
+
+### 1. Fixed Attendance API - Critical Bug Fix (`/api/events/[id]/attendance/route.ts`)
+- **BUG**: The POST handler used `userId` (the scanner/faculty's ID) to look up registration via `findUnique({ where: { eventId_userId: { eventId: id, userId } } })`. This always failed because the faculty is not registered for the event.
+- **FIX**: Changed to look up registration by QR code instead:
+  - `db.eventRegistration.findFirst({ where: { eventId: id, qrCode: qrCode }, include: { user: ... } })`
+  - The student's userId is now `registration.userId` (not the scanner's)
+  - All subsequent references to `userId` for creating attendance, awarding AICTE points, and sending notifications now use `studentUserId`
+- **Added scanner permission check**:
+  - Verifies scanner has FACULTY/HOD/ADMIN role OR an event role with CHECK_IN_ATTENDEES permission
+  - Returns 403 if unauthorized
+- **Enhanced response**: Now includes `student` object with id, name, email, usn, department
+- **Enhanced GET handler**: Added `?recent=N` query parameter to fetch last N check-ins (used by QR scanner's recent check-ins section)
+
+### 2. Enhanced QR Scanner Component (`QRScanner.tsx`)
+- **Auto-detect event from QR code**: Added `parseQRCode()` function that parses `NEXEVENT-{eventId}-{userId}-{timestamp}` format. When a QR code is scanned/entered, the event is auto-selected.
+- **Auto-submit on scan**: When a QR code is detected by camera or entered manually, the check-in is auto-submitted (no need to click "Check In" again)
+- **Enhanced success display**: Shows student info card with:
+  - Student avatar/icon, name, USN, department
+  - Check-in time, status badge
+  - AICTE points awarded badge
+  - "Scan Next Student" button to reset and continue scanning
+- **Enhanced failure display**: Shows student info even on "Already checked in" error
+- **Recent Check-ins section**: Shows the last 5 check-ins for the selected event, auto-refreshed after each successful check-in
+- **Better UX**: "Scan Next Student" button resets QR code and restarts camera for continuous scanning workflow
+
+### 3. Enhanced QR Code Display in MyEvents (`MyEvents.tsx`)
+- **QR Code dialog** now shows:
+  - The QR code SVG (existing)
+  - Event name (existing, now with bold font)
+  - Registration status badge (CONFIRMED/REGISTERED/etc.)
+  - Checked-in badge (if attendance exists)
+  - "Copy Code" button that copies the QR text value to clipboard with visual feedback (Check icon + "Copied!")
+  - The raw QR code value displayed in monospace font below the button
+- Added `copiedCode` state for copy button feedback
+
+### 4. Enhanced QR Code Display in EventDetail (`EventDetail.tsx`)
+- **QR Code section** now includes:
+  - "Copy Code" button below the QR code SVG
+  - Visual feedback with CheckCircle2 icon on copy
+  - Toast notification on copy
+  - Raw QR code value displayed in monospace font
+- Added `copiedQRCode` state for copy button feedback
+
+### Lint: All changes pass `bun run lint` with zero errors ✅
+
+---
+
+## Session 10 Changes (Faculty Club Restriction + Club Display + QR Code Fix)
+
+### Task ID: 2 - Restrict Faculty to Only Create Events for Their Clubs
+
+#### 1. CreateEventForm Club Filtering
+- **File**: `src/components/nexevent/CreateEventForm.tsx`
+- Replaced raw `clubs` state with `allClubs` + `useMemo`-derived `clubs` that filters based on user role
+- **FACULTY**: Only shows clubs where user is `facultyAdvisor` or a `member`
+- **ADMIN/HOD**: Shows all clubs (broader access)
+- Auto-selects the only club if faculty belongs to exactly one
+- Added "Only your clubs are shown" info badge for faculty
+- Empty state message: "You can only create events for clubs you're a faculty advisor or member of"
+
+#### 2. Events API Server-Side Validation
+- **File**: `src/app/api/events/route.ts`
+- Added faculty club membership validation before event creation
+- Query: `db.club.findFirst({ where: { id: clubId, OR: [{ facultyAdvisorId: userId }, { members: { some: { userId } } }] } })`
+- Returns 403 if faculty tries to create event for club they don't belong to
+- ADMIN and HOD bypass this check
+
+### Task ID: 3 - Show Clubs Faculty and Students Belong To
+
+#### 3. OrganizerDashboard "My Clubs" Section
+- **File**: `src/components/nexevent/OrganizerDashboard.tsx`
+- Added "My Clubs" section showing clubs where user is facultyAdvisor or member
+- Club cards with gradient initial, name, advisor badge (Crown icon), member count, event count
+- "All Clubs" link to navigate to full clubs view
+- Hover lift animation on cards
+- Placed prominently after Stats section, before Registration Overview
+
+#### 4. StudentDashboard Already Has Club Memberships
+- The StudentDashboard already shows a "Club Memberships" section with club cards, member counts, and role badges
+- No changes needed for students
+
+### Task ID: 4 - Make QR Code Logic Fully Functional
+
+#### 5. Fixed Critical Attendance API Bug
+- **File**: `src/app/api/events/[id]/attendance/route.ts`
+- **BUG**: POST handler used `userId` (scanner/faculty ID) to look up registration — always failed
+- **FIX**: Now looks up registration by QR code: `findFirst({ where: { eventId: id, qrCode } })`
+- Uses `registration.userId` (student) for all attendance, AICTE points, and notifications
+- Added scanner permission validation: FACULTY/HOD/ADMIN role OR event role with CHECK_IN_ATTENDEES
+- Response now includes student info (name, USN, email, department)
+- Added `?recent=N` query param for fetching recent check-ins
+
+#### 6. Enhanced QR Scanner Component
+- **File**: `src/components/nexevent/QRScanner.tsx`
+- Auto-detect event from QR code format `NEXEVENT-{eventId}-{userId}-{timestamp}`
+- Auto-submit check-in after QR scan (no extra click needed)
+- Student info card on success: name, USN, department, check-in time
+- Recent Check-ins section showing last 5 check-ins for selected event
+- "Scan Next Student" button for continuous scanning workflow
+
+#### 7. Enhanced MyEvents QR Dialog
+- **File**: `src/components/nexevent/MyEvents.tsx`
+- Added Copy Code button with visual feedback
+- Added registration status badge
+- Added checked-in badge when attendance exists
+- Shows raw QR code value in monospace font
+
+#### 8. Enhanced EventDetail QR Display
+- **File**: `src/components/nexevent/EventDetail.tsx`
+- Added Copy Code button with toast notification
+- Shows raw QR code value in monospace font below QR SVG
+
+### Lint: All changes pass `bun run lint` with zero errors ✅
+
+### Current State Assessment
+- **Dev server**: Running on port 3000, responding 200
+- **Faculty event creation**: Restricted to own clubs (both client and server-side)
+- **Club visibility**: Faculty sees "My Clubs" in dashboard, students already have "Club Memberships"
+- **QR code flow**: Fully functional — register → show QR → scan → check-in with student info
+- **Attendance API**: Fixed critical bug where faculty ID was used instead of student ID

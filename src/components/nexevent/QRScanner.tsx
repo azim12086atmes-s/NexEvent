@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import {
   ScanLine, CheckCircle2, XCircle, AlertTriangle, Loader2,
-  MapPin, Camera, Keyboard, Zap, Shield, Users
+  MapPin, Camera, Keyboard, Zap, Shield, Users, Copy, User, Hash, Building2, Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,41 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+
+// Parse the NEXEVENT-{eventId}-{userId}-{timestamp} format
+function parseQRCode(qrCode: string): { eventId: string; studentUserId: string; timestamp: string } | null {
+  if (!qrCode || !qrCode.startsWith('NEXEVENT-')) return null;
+  const parts = qrCode.split('-');
+  // Format: NEXEVENT-{eventId}-{userId}-{timestamp}
+  // eventId and userId are cuids which may contain hyphens... but the format uses single hyphens
+  // Actually looking at generateQRCode: `NEXEVENT-${eventId}-${userId}-${Date.now().toString(36)}`
+  // cuids typically start with 'c' and are ~25 chars, so we need to handle this carefully
+  // The timestamp is a base36 number at the end
+  // Strategy: find the last hyphen-split, that's the timestamp
+  // The second-to-last is userId, and everything between NEXEVENT- and userId is eventId
+  
+  // Actually, cuid format is like "clxyz123abc" - no hyphens in them
+  // So splitting by hyphen should give: ["NEXEVENT", eventId, userId, timestamp]
+  if (parts.length < 4) return null;
+  const eventId = parts[1];
+  const userId = parts[2];
+  const timestamp = parts.slice(3).join('-'); // in case timestamp has hyphens (unlikely but safe)
+  return { eventId, studentUserId: userId, timestamp };
+}
+
+interface RecentCheckIn {
+  id: string;
+  status: string;
+  checkInTime: string;
+  isWithinGeoFence: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    usn: string | null;
+    department: any;
+  };
+}
 
 export function QRScanner() {
   const { user } = useAuthStore();
@@ -26,6 +61,8 @@ export function QRScanner() {
   const [scanMode, setScanMode] = useState<'camera' | 'manual'>('camera');
   const [isScanning, setIsScanning] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
+  const [recentCheckIns, setRecentCheckIns] = useState<RecentCheckIn[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
   const scannerRef = useRef<any>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
 
@@ -44,6 +81,50 @@ export function QRScanner() {
     loadEvents();
   }, [user]);
 
+  // Load recent check-ins when event is selected
+  const loadRecentCheckIns = useCallback(async (evId: string) => {
+    if (!evId) return;
+    setLoadingRecent(true);
+    try {
+      const res = await fetch(`/api/events/${evId}/attendance?recent=5`);
+      if (res.ok) {
+        const data = await res.json();
+        setRecentCheckIns(data.attendances || []);
+      }
+    } catch {}
+    setLoadingRecent(false);
+  }, []);
+
+  useEffect(() => {
+    if (eventId) {
+      loadRecentCheckIns(eventId);
+    } else {
+      setRecentCheckIns([]);
+    }
+  }, [eventId, loadRecentCheckIns]);
+
+  // Auto-detect event from QR code
+  const handleQRCodeInput = useCallback((code: string) => {
+    setQrCode(code);
+    setResult(null);
+    
+    if (!code) return;
+    
+    const parsed = parseQRCode(code);
+    if (parsed) {
+      // Auto-select the event from QR code
+      const matchingEvent = events.find(e => e.id === parsed.eventId);
+      if (matchingEvent && eventId !== parsed.eventId) {
+        setEventId(parsed.eventId);
+        toast.info(`Auto-selected event: ${matchingEvent.title}`);
+      } else if (!matchingEvent && !eventId) {
+        // Event not in list but we can still set the ID
+        setEventId(parsed.eventId);
+        toast.info('Event detected from QR code');
+      }
+    }
+  }, [events, eventId]);
+
   // Start/stop camera scanner
   const startScanner = useCallback(async () => {
     if (!scannerContainerRef.current) return;
@@ -61,13 +142,27 @@ export function QRScanner() {
           aspectRatio: 1.0,
         },
         (decodedText: string) => {
-          // QR code detected!
+          // QR code detected - auto-submit!
           setQrCode(decodedText);
-          toast.success('QR code detected!');
-          // Stop scanner after detection
           scanner.stop().then(() => {
             setIsScanning(false);
           }).catch(() => {});
+          
+          // Parse and auto-select event
+          const parsed = parseQRCode(decodedText);
+          if (parsed) {
+            setEventId(prev => {
+              if (prev !== parsed.eventId) {
+                const matchingEvent = events.find(e => e.id === parsed.eventId);
+                if (matchingEvent) {
+                  toast.info(`Auto-selected: ${matchingEvent.title}`);
+                }
+              }
+              return parsed.eventId;
+            });
+          }
+          
+          toast.success('QR code detected! Processing check-in...');
         },
         () => {
           // QR code not found (this fires continuously, ignore)
@@ -79,7 +174,7 @@ export function QRScanner() {
       toast.error('Camera access denied or not available. Use manual input instead.');
       setScanMode('manual');
     }
-  }, []);
+  }, [events]);
 
   const stopScanner = useCallback(() => {
     if (scannerRef.current && isScanning) {
@@ -104,7 +199,6 @@ export function QRScanner() {
   // Auto-start when switching to camera mode
   useEffect(() => {
     if (scanMode === 'camera' && !isScanning) {
-      // Small delay to ensure DOM is ready
       const timer = setTimeout(() => startScanner(), 300);
       return () => clearTimeout(timer);
     } else if (scanMode === 'manual' && isScanning) {
@@ -112,8 +206,23 @@ export function QRScanner() {
     }
   }, [scanMode, startScanner, stopScanner, isScanning]);
 
+  // Auto-submit when QR code is scanned and event is selected
+  useEffect(() => {
+    if (qrCode && eventId && !isCheckingIn && !result?.ok) {
+      const parsed = parseQRCode(qrCode);
+      // Only auto-submit if the QR code matches the selected event
+      if (!parsed || parsed.eventId === eventId) {
+        // Small delay to let state settle
+        const timer = setTimeout(() => {
+          handleCheckIn();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [qrCode, eventId]);
+
   const handleCheckIn = async () => {
-    if (!user || !eventId || !qrCode) return;
+    if (!user || !eventId || !qrCode || isCheckingIn) return;
     setIsCheckingIn(true);
     setResult(null);
 
@@ -137,15 +246,28 @@ export function QRScanner() {
       setResult({ ok: res.ok, data });
       if (res.ok) {
         toast.success(data.message);
-        setQrCode(''); // Clear for next scan
+        // Refresh recent check-ins
+        loadRecentCheckIns(eventId);
+      } else {
+        toast.error(data.error);
       }
-      else toast.error(data.error);
     } catch {
       setResult({ ok: false, data: { error: 'Check-in failed' } });
       toast.error('Check-in failed');
     }
     setIsCheckingIn(false);
   };
+
+  const handleReset = () => {
+    setQrCode('');
+    setResult(null);
+    // Restart camera if in camera mode
+    if (scanMode === 'camera' && !isScanning) {
+      setTimeout(() => startScanner(), 300);
+    }
+  };
+
+  const selectedEvent = events.find(e => e.id === eventId);
 
   if (!user || (user.role !== 'FACULTY' && user.role !== 'ADMIN' && user.role !== 'HOD')) {
     return (
@@ -183,7 +305,7 @@ export function QRScanner() {
                 {events.map((event) => (
                   <button
                     key={event.id}
-                    onClick={() => setEventId(event.id)}
+                    onClick={() => { setEventId(event.id); setQrCode(''); setResult(null); }}
                     className={`w-full text-left p-3 rounded-lg border transition-all text-sm ${
                       eventId === event.id
                         ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
@@ -213,7 +335,7 @@ export function QRScanner() {
                 <Input
                   placeholder="Paste event ID"
                   value={eventId}
-                  onChange={(e) => setEventId(e.target.value)}
+                  onChange={(e) => { setEventId(e.target.value); setQrCode(''); setResult(null); }}
                   className="h-9"
                 />
               </div>
@@ -250,14 +372,14 @@ export function QRScanner() {
                 id="qr-reader"
                 className="w-full min-h-[280px] rounded-lg overflow-hidden bg-black/5 flex items-center justify-center"
               >
-                {!isScanning && (
+                {!isScanning && !qrCode && (
                   <div className="text-center py-12">
                     <Camera className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">Starting camera...</p>
                   </div>
                 )}
               </div>
-              {qrCode && (
+              {qrCode && !isScanning && (
                 <div className="mt-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
                   <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5" /> QR Code detected:
@@ -279,28 +401,39 @@ export function QRScanner() {
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">QR Code Value</Label>
                 <Input
-                  placeholder="Paste or type QR code value"
+                  placeholder="Paste or type QR code value (NEXEVENT-...)"
                   value={qrCode}
-                  onChange={(e) => setQrCode(e.target.value)}
+                  onChange={(e) => handleQRCodeInput(e.target.value)}
                   className="h-9 font-mono text-xs"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  QR format: NEXEVENT-eventId-userId-timestamp
+                </p>
               </div>
+              <Button
+                onClick={handleCheckIn}
+                disabled={isCheckingIn || !eventId || !qrCode}
+                className="w-full bg-primary hover:bg-primary/90 h-11"
+              >
+                {isCheckingIn ? (
+                  <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processing...</>
+                ) : (
+                  <><ScanLine className="w-4 h-4 mr-2" /> Check In Student</>
+                )}
+              </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Check-in Button */}
-        <Button
-          onClick={handleCheckIn}
-          disabled={isCheckingIn || !eventId || !qrCode}
-          className="w-full bg-primary hover:bg-primary/90 h-11"
-        >
-          {isCheckingIn ? (
-            <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Processing...</>
-          ) : (
-            <><ScanLine className="w-4 h-4 mr-2" /> Check In Student</>
-          )}
-        </Button>
+        {/* Manual check-in button for camera mode (shown when QR is detected but not auto-submitted) */}
+        {scanMode === 'camera' && qrCode && !isCheckingIn && !result?.ok && eventId && (
+          <Button
+            onClick={handleCheckIn}
+            className="w-full bg-primary hover:bg-primary/90 h-11 mb-4"
+          >
+            <ScanLine className="w-4 h-4 mr-2" /> Check In Student
+          </Button>
+        )}
 
         {/* Geo-fence indicator */}
         {eventId && (
@@ -310,37 +443,108 @@ export function QRScanner() {
           </div>
         )}
 
-        {/* Result */}
+        {/* Result - Enhanced with student info */}
         <AnimatePresence>
           {result && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
               <Card className={`mt-4 ${result.ok ? 'border-emerald-200 dark:border-emerald-800' : 'border-red-200 dark:border-red-800'}`}>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    {result.ok ? (
-                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                    ) : (
-                      <XCircle className="w-6 h-6 text-red-500" />
-                    )}
-                    <div>
-                      <p className={`font-semibold ${result.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-                        {result.ok ? 'Check-in Successful' : 'Check-in Failed'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{result.data.message || result.data.error}</p>
+                  {result.ok ? (
+                    <div className="space-y-4">
+                      {/* Success header */}
+                      <div className="flex items-center gap-3">
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 200 }}
+                        >
+                          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                        </motion.div>
+                        <div>
+                          <p className="font-semibold text-emerald-700 dark:text-emerald-300 text-lg">
+                            Check-in Successful!
+                          </p>
+                          <p className="text-sm text-muted-foreground">{result.data.message}</p>
+                        </div>
+                      </div>
+
+                      {/* Student Info Card */}
+                      {result.data.student && (
+                        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <User className="w-6 h-6 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-base">{result.data.student.name}</p>
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                                {result.data.student.usn && (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Hash className="w-3 h-3" /> {result.data.student.usn}
+                                  </span>
+                                )}
+                                {result.data.student.department?.name && (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Building2 className="w-3 h-3" /> {result.data.student.department.name}
+                                  </span>
+                                )}
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="w-3 h-3" /> {new Date(result.data.attendance.checkInTime).toLocaleTimeString('en-IN')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status details */}
+                      <div className="space-y-1.5 text-xs text-muted-foreground">
+                        <div className="flex items-center justify-between">
+                          <span>Status:</span>
+                          <Badge variant="outline" className="text-[10px]">{result.data.attendance.status}</Badge>
+                        </div>
+                        {result.data.attendance.isWithinGeoFence === false && (
+                          <p className="text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Outside geo-fence radius
+                          </p>
+                        )}
+                        {result.data.aictePointsAwarded > 0 && (
+                          <div className="flex items-center justify-between">
+                            <span>AICTE Points:</span>
+                            <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                              +{result.data.aictePointsAwarded} pts
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scan next button */}
+                      <Button onClick={handleReset} variant="outline" className="w-full">
+                        <ScanLine className="w-4 h-4 mr-2" /> Scan Next Student
+                      </Button>
                     </div>
-                  </div>
-                  {result.ok && result.data.attendance && (
-                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                      <p>Status: <Badge variant="outline" className="text-[10px]">{result.data.attendance.status}</Badge></p>
-                      {result.data.attendance.isWithinGeoFence === false && (
-                        <p className="text-amber-600 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> Outside geo-fence radius
-                        </p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <XCircle className="w-8 h-8 text-red-500" />
+                        <div>
+                          <p className="font-semibold text-red-700 dark:text-red-300 text-lg">Check-in Failed</p>
+                          <p className="text-sm text-muted-foreground">{result.data.error}</p>
+                        </div>
+                      </div>
+                      {/* If already checked in, show student info from error response */}
+                      {result.data.student && (
+                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+                          <p className="text-xs font-medium text-amber-700 dark:text-amber-300">Already checked in:</p>
+                          <p className="text-sm font-semibold">{result.data.student.name}</p>
+                          {result.data.student.usn && (
+                            <p className="text-xs text-muted-foreground">{result.data.student.usn}</p>
+                          )}
+                        </div>
                       )}
-                      <p>Time: {new Date(result.data.attendance.checkInTime).toLocaleTimeString('en-IN')}</p>
-                      {result.data.attendance.attendancePercentage !== undefined && (
-                        <p>Attendance: {Math.round(result.data.attendance.attendancePercentage)}%</p>
-                      )}
+                      <Button onClick={handleReset} variant="outline" className="w-full">
+                        Try Again
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -349,13 +553,70 @@ export function QRScanner() {
           )}
         </AnimatePresence>
 
+        {/* Recent Check-ins */}
+        {eventId && (
+          <Card className="mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> Recent Check-ins
+                {selectedEvent && (
+                  <Badge variant="outline" className="text-[10px] ml-auto">{selectedEvent.title}</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loadingRecent ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : recentCheckIns.length === 0 ? (
+                <div className="text-center py-6">
+                  <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">No check-ins yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {recentCheckIns.map((ci) => (
+                    <div
+                      key={ci.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{ci.user.name}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          {ci.user.usn && <span>{ci.user.usn}</span>}
+                          <span>{new Date(ci.checkInTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </div>
+                      <Badge
+                        className={`text-[10px] shrink-0 ${
+                          ci.status === 'PRESENT'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+                            : ci.status === 'LATE'
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                            : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                        }`}
+                      >
+                        {ci.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Info */}
         <Card className="mt-4 bg-muted/30">
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground leading-relaxed">
               <strong>How it works:</strong> Students register for an event and receive a unique QR code.
-              At the venue, scan or enter the QR code value to check them in. If the event has geo-fencing enabled,
-              the system validates that the student is physically at the venue within the configured radius.
+              At the venue, scan or enter the QR code value to check them in. The event is auto-detected from the QR code.
+              If the event has geo-fencing enabled, the system validates that the check-in is within the configured radius.
               Proxy attendance from outside the venue will be flagged.
             </p>
           </CardContent>
