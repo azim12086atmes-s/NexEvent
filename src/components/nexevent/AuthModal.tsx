@@ -1,16 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
-import { X, Mail, Lock, User, Building2, Hash, Phone, Loader2 } from 'lucide-react';
+import { X, Mail, Lock, User, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -26,8 +23,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
   const { login, register, isLoading, error, clearError } = useAuthStore();
 
   const [form, setForm] = useState({
-    email: '', password: '', name: '', role: 'STUDENT',
-    department: '', usn: '', phone: '',
+    email: '', password: '', name: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,9 +33,11 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
         await login(form.email, form.password);
       } else {
         await register(form);
+        // After registration, show message and switch to login
+        // User needs admin approval before they can log in
       }
       onClose();
-      setForm({ email: '', password: '', name: '', role: 'STUDENT', department: '', usn: '', phone: '' });
+      setForm({ email: '', password: '', name: '' });
     } catch {}
   };
 
@@ -69,46 +67,9 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
                     className="pl-9 h-9" required />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Role</Label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="STUDENT">Student</SelectItem>
-                    <SelectItem value="ORGANIZER">Organizer</SelectItem>
-                    <SelectItem value="FACULTY">Faculty</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {(form.role === 'STUDENT' || form.role === 'ORGANIZER') && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">USN</Label>
-                  <div className="relative">
-                    <Hash className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="4VV22CS001" value={form.usn}
-                      onChange={(e) => setForm({ ...form, usn: e.target.value })}
-                      className="pl-9 h-9" />
-                  </div>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Department</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Computer Science" value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
-                    className="pl-9 h-9" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Phone</Label>
-                <div className="relative">
-                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="9876543210" value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="pl-9 h-9" />
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded-md">
+                Your role and department will be assigned by the admin after approval.
+              </p>
             </motion.div>
           )}
 
@@ -159,7 +120,7 @@ export function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalP
                 {[
                   { label: 'Admin', email: 'admin@vvce.ac.in', pw: 'admin123' },
                   { label: 'Faculty', email: 'priya.sharma@vvce.ac.in', pw: 'faculty123' },
-                  { label: 'Organizer', email: 'rahul.gowda@vvce.ac.in', pw: 'org123' },
+                  { label: 'HOD', email: 'hod.cs@vvce.ac.in', pw: 'demo123' },
                   { label: 'Student', email: 'aditi.n@vvce.ac.in', pw: 'student123' },
                 ].map((d) => (
                   <button key={d.label} type="button"

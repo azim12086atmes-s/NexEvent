@@ -405,3 +405,190 @@ The application is stable with all major user workflows functional:
 - **File**: `src/components/nexevent/LandingPage.tsx`
 
 ### Lint: All changes pass `bun run lint` with zero errors ✅
+
+---
+
+## Session 7 Changes (Phase 1 - Schema Redesign + Core Role System)
+
+### Task ID: 1 - Phase 1: Remove ORGANIZER, Add HOD/OTHER/Department
+
+### 1. Prisma Schema - Major Role System Redesign
+- **UserRole enum**: Removed ORGANIZER, added OTHER. Now: STUDENT, FACULTY, HOD, ADMIN, OTHER
+- **User model**: 
+  - `role` default changed from STUDENT → OTHER (new users start as OTHER until admin assigns role)
+  - Added `approvalStatus UserApprovalStatus @default(PENDING)` - new users must be approved
+  - Added `aictePoints Float @default(0)` for AICTE activity points tracking
+  - Added `googleId String?` and `googleEmail String?` for Google OAuth support
+  - Added `departmentId String?` with relation to Department
+  - Fixed `clubRequests` and added `reviewedClubRequests` with @relation names to disambiguate
+  - All existing relations preserved (clubMemberships, organizedEvents, registrations, etc.)
+- **UserApprovalStatus enum** (NEW): PENDING, APPROVED, REJECTED
+- **Department model**: Already existed - verified correct with id, name (unique), code (unique), description, hodId, isActive, relations (hod, clubs, events, users, clubCreationRequests)
+- **Club model**: 
+  - Added `departmentId String` (required - clubs belong to departments)
+  - Already had `approvalStatus`, `approvedById`, `approvedAt`, `autoJoin`, `requireApproval`
+- **ClubApprovalStatus enum**: Already existed - PENDING, APPROVED, REJECTED
+- **ClubCreationRequest model**: Verified correct with disambiguated @relation names
+- **Event model**: 
+  - Added `aictePoints Float?` for participation points
+  - Added `volunteerAictePoints Float?` for volunteer points
+  - Already had `departmentId String?` for department-wise events
+- **EventRegistration model**: Already had `currentRoundId String?`
+- **Attendance model**: Already had `attendancePercentage`, `lastPingTime`, `totalPingsInFence`, `totalPings`, `checkOutTime`
+- **LocationPing model**: Already existed with all required fields
+- **Score model**: Verified correct
+- **CompetitionRound model**: Already had `scoringOpen` and `scoringDeadline`
+- **Certificate model**: Verified with CertificateType and CertificateScope enums
+- **Event model**: Added `locationPings LocationPing[]` relation
+- **Department model**: Added `clubCreationRequests ClubCreationRequest[]` relation
+
+### 2. Database Reset & Re-seed
+- Deleted old database (had ORGANIZER role data that's now invalid)
+- Ran `prisma db push` to create fresh schema
+- Seeded with new data:
+  - 5 Departments (CS, IS, EC, ME, CV) with HODs
+  - 2 HOD users (Dr. Kavitha Raj for CS, Dr. Suresh Bhat for EC)
+  - Former ORGANIZER users → now STUDENT with club Event Coordinator permissions
+  - All users have `approvalStatus: APPROVED` (demo accounts)
+  - All clubs have `departmentId` set correctly
+  - 23 users total: 1 ADMIN, 2 FACULTY, 2 HOD, 18 STUDENT
+
+### 3. Registration API (`/api/auth/register/route.ts`)
+- Removed `role` from required fields - users do NOT choose their role
+- Default role is OTHER
+- Default approvalStatus is PENDING (not auto-approved)
+- New users register with just: name, email, password
+- Optional: department, usn, phone (will be set by admin via CSV later)
+- Removed the ORGANIZER role validation check
+
+### 4. Login API (`/api/auth/route.ts`)
+- Added `approvalStatus === 'PENDING'` check → "Your account is pending admin approval"
+- Added `approvalStatus === 'REJECTED'` check → "Your account has been rejected"
+- Only APPROVED users can log in
+
+### 5. AuthModal (`/src/components/nexevent/AuthModal.tsx`)
+- Removed Role selector (Select dropdown) from registration form
+- Removed USN field from registration (will be set by admin)
+- Removed Department field from registration (will be set by admin)
+- Registration form now only: Full Name, Email, Password
+- Added info text: "Your role and department will be assigned by the admin after approval"
+- Replaced ORGANIZER demo account with HOD demo account (hod.cs@vvce.ac.in / demo123)
+- Updated demo accounts: Admin, Faculty, HOD, Student
+
+### 6. Auth Store (`/src/store/auth-store.ts`)
+- AuthUser.role type: changed to `'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'OTHER'`
+- Added `departmentId` and `approvalStatus` to AuthUser type
+- Removed ORGANIZER from the type
+- Register function no longer auto-logs in user (needs admin approval first)
+
+### 7. Navbar (`/src/components/nexevent/Navbar.tsx`)
+- Dashboard, Create, Admin, Scan QR: shown for FACULTY, HOD, ADMIN (removed ORGANIZER check)
+- "My Events": shown only for STUDENT and OTHER roles
+- Added HOD to roleColors: `'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300'`
+- Added OTHER to roleColors: `'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'`
+- Removed ORGANIZER from roleColors
+
+### 8. AdminPanel (`/src/components/nexevent/AdminPanel.tsx`)
+- Access now allowed for ADMIN, HOD, and FACULTY (was just ADMIN, FACULTY)
+- Updated access denied message: "Only faculty, HODs, and admins can access this panel"
+
+### 9. OrganizerDashboard (`/src/components/nexevent/OrganizerDashboard.tsx`)
+- Changed title from "Organizer Dashboard" to "Event Dashboard"
+- Changed badge from fixed "Organizer" to dynamic `{user.role}` (shows FACULTY/HOD/ADMIN)
+- Role checks already allowed ORGANIZER/FACULTY/ADMIN → now FACULTY/HOD/ADMIN
+
+### 10. QRScanner (`/src/components/nexevent/QRScanner.tsx`)
+- Removed ORGANIZER from access check
+- Now allows FACULTY, HOD, and ADMIN
+- Updated message: "Only faculty, HODs, and admins can scan QR codes"
+
+### 11. EventFeed (`/src/components/nexevent/EventFeed.tsx`)
+- Replaced `user?.role === 'ORGANIZER'` with `user?.role === 'HOD'` in both Create Event buttons
+- Now shows Create Event for FACULTY, HOD, ADMIN
+
+### 12. EventDetail (`/src/components/nexevent/EventDetail.tsx`)
+- No ORGANIZER-specific role checks to update (uses organizerId field, not role)
+
+### 13. CreateEventForm (`/src/components/nexevent/CreateEventForm.tsx`)
+- Changed access check from `ORGANIZER, FACULTY, ADMIN` to `FACULTY, HOD, ADMIN`
+- Updated message: "Only faculty, HODs, and admins can create events"
+
+### 14. Events API (`/src/app/api/events/route.ts`)
+- Changed `['ORGANIZER', 'FACULTY', 'ADMIN']` to `['FACULTY', 'HOD', 'ADMIN']`
+- Updated error message: "Only faculty, HODs, or admins can create events"
+
+### 15. ProfileView (`/src/components/nexevent/ProfileView.tsx`)
+- Added HOD to roleColors and roleGradients
+- Added OTHER to roleColors and roleGradients
+- Removed ORGANIZER from both
+
+### 16. Seed Data (`/src/app/api/seed/route.ts`)
+- Updated to create 5 Departments before users
+- Added 2 HOD users with department assignments
+- Changed former ORGANIZER users to STUDENT role with demo123 password
+- All clubs now have departmentId set
+- All users have approvalStatus: APPROVED
+- Department HODs linked via hodId
+
+### Lint: All changes pass `bun run lint` with zero errors ✅
+
+---
+
+## Session 8 Changes (Phase 2 - Admin Panel + User Management + Bug Fixes)
+
+### Task ID: 2 - Phase 2: Admin Panel User Management, CSV Upload, Department Management
+
+### 1. Admin Users API (`/api/admin/users/route.ts`) - NEW
+- GET: List all users with filters (role, approvalStatus, department, search)
+- PUT: Update user role, approvalStatus, departmentId, isActive, usn
+- Role assignment rules enforced (only ADMIN can create other ADMINs)
+- HOD role auto-links to department's hodId
+- Removing HOD role clears department's hodId
+
+### 2. CSV Upload API (`/api/admin/csv-upload/route.ts`) - NEW
+- POST: Accept CSV file with type ('students' or 'faculty')
+- Student CSV format: email, name, usn, department_code
+- Faculty/HOD CSV format: email, name, role (FACULTY/HOD), department_code
+- Existing users: update role, department, approvalStatus
+- New users: create with default password = email prefix, auto-approved
+- Returns results summary (updated, created, errors)
+
+### 3. Departments API (`/api/admin/departments/route.ts`) - NEW
+- GET: List departments with HOD, club count, user count, event count
+- POST: Create department (name, code, description) - admin only
+- PUT: Update department (assign HOD, update details)
+- DELETE: Delete department (only if no clubs/users)
+
+### 4. AdminPanel Redesign - Tabbed Interface
+- **Events Tab**: Existing event approvals and all-events list (preserved)
+- **Users Tab** (NEW): User list with search, role/approval/department filters
+  - Approve/Reject pending users
+  - Change role via dropdown (OTHER → STUDENT → FACULTY → HOD → ADMIN)
+  - Set department via dropdown
+  - Activate/Deactivate users
+  - Shows AICTE points, registration count, club memberships
+- **CSV Upload Tab** (NEW): File upload area with drag-and-drop feel
+  - Select CSV type (Students / Faculty-HOD)
+  - Shows format guide with examples
+  - Upload results summary card
+- **Departments Tab** (NEW): Department cards with stats
+  - Create department dialog
+  - Assign HOD to department
+  - Shows user/club/event counts per department
+
+### 5. Bug Fix: Event "Started" → "LIVE" Status Display
+- **Issue**: Events whose start time had passed showed "Started" instead of LIVE
+- **Root Cause**: `getTimeUntil()` in EventFeed.tsx returned `{ text: 'Started' }` for past events without checking if event was still ongoing
+- **Fix**: Updated `getTimeUntil()` to accept `endDate` parameter
+  - If start time passed but event hasn't ended → returns "LIVE" with `isLive: true`
+  - If event has ended → returns "Ended"
+- **Files**: EventFeed.tsx, EventDetail.tsx
+- **Additional**: Added pulsing LIVE badge to event cards for currently-ongoing events
+
+### 6. Bug Fix: Broader Event Deletion
+- **Issue**: Events could only be deleted in DRAFT/PENDING_APPROVAL status
+- **Fix**: Now allows deletion of any non-COMPLETED event by organizer, admin, faculty, or HOD
+- **File**: `/api/events/[id]/route.ts`
+- **UI**: Added "Delete Event" button in EventDetail sidebar for organizers
+
+### Lint: All changes pass `bun run lint` with zero errors ✅

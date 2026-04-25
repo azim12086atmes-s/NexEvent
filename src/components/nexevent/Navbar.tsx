@@ -26,16 +26,14 @@ export function Navbar() {
 
   const navItems = isAuthenticated ? [
     { icon: Calendar, label: 'Events', view: 'feed' as const },
-    { icon: BookmarkCheck, label: 'My Events', view: 'my-events' as const },
+    ...(user?.role === 'STUDENT' || user?.role === 'OTHER'
+      ? [{ icon: BookmarkCheck, label: 'My Events', view: 'my-events' as const }]
+      : []),
     { icon: Users, label: 'Clubs', view: 'clubs' as const },
-    ...(user?.role === 'ORGANIZER' || user?.role === 'FACULTY' || user?.role === 'ADMIN'
+    ...(user?.role === 'FACULTY' || user?.role === 'HOD' || user?.role === 'ADMIN'
       ? [
           { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard' as const },
           { icon: PlusCircle, label: 'Create', view: 'create-event' as const },
-        ]
-      : []),
-    ...(user?.role === 'FACULTY' || user?.role === 'ADMIN'
-      ? [
           { icon: Shield, label: 'Admin', view: 'admin' as const },
           { icon: ScanLine, label: 'Scan QR', view: 'scan-qr' as const },
         ]
@@ -45,9 +43,10 @@ export function Navbar() {
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   const roleColors: Record<string, string> = {
     STUDENT: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
-    ORGANIZER: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
     FACULTY: 'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300',
+    HOD: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
     ADMIN: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
+    OTHER: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   };
 
   return (

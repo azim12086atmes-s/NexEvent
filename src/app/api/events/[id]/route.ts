@@ -138,12 +138,13 @@ export async function DELETE(
     }
 
     const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user || (event.organizerId !== userId && user.role !== 'ADMIN')) {
+    if (!user || (event.organizerId !== userId && user.role !== 'ADMIN' && user.role !== 'FACULTY' && user.role !== 'HOD')) {
       return NextResponse.json({ error: 'Not authorized to delete this event' }, { status: 403 });
     }
 
-    if (!['DRAFT', 'PENDING_APPROVAL'].includes(event.status)) {
-      return NextResponse.json({ error: 'Can only delete events in draft or pending approval status' }, { status: 400 });
+    // Allow deletion of any event that hasn't been completed yet
+    if (event.status === 'COMPLETED') {
+      return NextResponse.json({ error: 'Cannot delete completed events. They are part of the historical record.' }, { status: 400 });
     }
 
     await db.event.delete({ where: { id } });

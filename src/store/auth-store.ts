@@ -6,11 +6,13 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: 'STUDENT' | 'ORGANIZER' | 'FACULTY' | 'ADMIN';
+  role: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'OTHER';
   department: string | null;
+  departmentId: string | null;
   usn: string | null;
   phone: string | null;
   avatar: string | null;
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
 }
 
 interface LoginResponse {
@@ -22,7 +24,6 @@ interface RegisterData {
   email: string;
   name: string;
   password: string;
-  role?: string;
   department?: string;
   usn?: string;
   phone?: string;
@@ -93,9 +94,9 @@ export const useAuthStore = create<AuthState>()(
             throw new Error((responseData as any).error || 'Registration failed');
           }
 
+          // New users have PENDING approval - don't auto-login
+          // They need admin approval first
           set({
-            user: responseData.user,
-            isAuthenticated: true,
             isLoading: false,
             error: null,
           });

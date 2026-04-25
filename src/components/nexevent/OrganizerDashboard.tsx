@@ -137,9 +137,9 @@ export function OrganizerDashboard() {
       >
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">Organizer Dashboard</h1>
+            <h1 className="text-2xl font-bold">Event Dashboard</h1>
             <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
-              <Zap className="w-2.5 h-2.5 mr-1" /> Organizer
+              <Zap className="w-2.5 h-2.5 mr-1" /> {user.role}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">Manage your events and view analytics</p>

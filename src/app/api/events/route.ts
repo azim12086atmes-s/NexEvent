@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await db.user.findUnique({ where: { id: userId } });
-    if (!user || !['ORGANIZER', 'FACULTY', 'ADMIN'].includes(user.role)) {
-      return NextResponse.json({ error: 'Only organizers, faculty, or admins can create events' }, { status: 403 });
+    if (!user || !['FACULTY', 'HOD', 'ADMIN'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only faculty, HODs, or admins can create events' }, { status: 403 });
     }
 
     const {

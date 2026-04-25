@@ -211,12 +211,12 @@ export function CreateEventForm() {
     }
   };
 
-  if (!user || (user.role !== 'ORGANIZER' && user.role !== 'FACULTY' && user.role !== 'ADMIN')) {
+  if (!user || (user.role !== 'FACULTY' && user.role !== 'HOD' && user.role !== 'ADMIN')) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <AlertCircle className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
-          <p className="text-muted-foreground">Only organizers and faculty can create events.</p>
+          <p className="text-muted-foreground">Only faculty, HODs, and admins can create events.</p>
         </div>
       </div>
     );

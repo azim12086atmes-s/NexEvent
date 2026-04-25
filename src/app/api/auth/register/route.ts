@@ -4,18 +4,14 @@ import { simpleHash, isVVCEEmail } from '@/lib/geo';
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, password, role, department, usn, phone } = await request.json();
+    const { name, email, password, department, usn, phone } = await request.json();
 
-    if (!name || !email || !password || !role) {
-      return NextResponse.json({ error: 'Name, email, password, and role are required' }, { status: 400 });
+    if (!name || !email || !password) {
+      return NextResponse.json({ error: 'Name, email, and password are required' }, { status: 400 });
     }
 
     if (!isVVCEEmail(email)) {
       return NextResponse.json({ error: 'Only @vvce.ac.in email addresses are allowed' }, { status: 400 });
-    }
-
-    if (!['STUDENT', 'ORGANIZER', 'FACULTY', 'ADMIN'].includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
 
     if (password.length < 6) {
@@ -27,20 +23,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
     }
 
+    // New users get role OTHER and must be approved by admin
     const user = await db.user.create({
       data: {
         name,
         email,
         passwordHash: simpleHash(password),
-        role,
-        department: department || null,
-        usn: usn || null,
+        role: 'OTHER',
+        approvalStatus: 'PENDING',
         phone: phone || null,
+        usn: usn || null,
+        departmentId: department || null,
       },
     });
 
     const { passwordHash: _, ...userWithoutPassword } = user;
-    return NextResponse.json({ user: userWithoutPassword, message: 'Registration successful' }, { status: 201 });
+    return NextResponse.json({ 
+      user: userWithoutPassword, 
+      message: 'Registration successful! Your account is pending admin approval.' 
+    }, { status: 201 });
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

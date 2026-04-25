@@ -63,18 +63,28 @@ function formatTime(d: string | Date) {
   return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function getTimeUntil(d: string | Date): { text: string; urgent: boolean } {
+function getTimeUntil(d: string | Date, endDate?: string | Date): { text: string; urgent: boolean; isLive: boolean } {
   const now = new Date();
   const target = new Date(d);
+  const end = endDate ? new Date(endDate) : null;
   const diff = target.getTime() - now.getTime();
-  if (diff < 0) return { text: 'Started', urgent: false };
+  
+  // If event has started
+  if (diff < 0) {
+    // Check if still ongoing (hasn't ended yet)
+    if (end && now.getTime() < end.getTime()) {
+      return { text: 'LIVE', urgent: true, isLive: true };
+    }
+    return { text: 'Ended', urgent: false, isLive: false };
+  }
+  
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
-  if (days > 7) return { text: `${Math.floor(days / 7)}w ${days % 7}d`, urgent: false };
-  if (days > 0) return { text: `${days}d ${hours % 24}h`, urgent: days <= 2 };
-  if (hours > 0) return { text: `${hours}h`, urgent: hours <= 6 };
+  if (days > 7) return { text: `${Math.floor(days / 7)}w ${days % 7}d`, urgent: false, isLive: false };
+  if (days > 0) return { text: `${days}d ${hours % 24}h`, urgent: days <= 2, isLive: false };
+  if (hours > 0) return { text: `${hours}h`, urgent: hours <= 6, isLive: false };
   const mins = Math.floor(diff / (1000 * 60));
-  return { text: `${mins}m`, urgent: true };
+  return { text: `${mins}m`, urgent: true, isLive: false };
 }
 
 function EventCard({ event, index, onRegister, registering, isFeatured }: {
@@ -82,12 +92,12 @@ function EventCard({ event, index, onRegister, registering, isFeatured }: {
 }) {
   const { navigate } = useUIStore();
   const { user } = useAuthStore();
-  const timeUntil = getTimeUntil(event.startDate);
+  const timeUntil = getTimeUntil(event.startDate, event.endDate);
   const regCount = event._count?.registrations || 0;
   const maxP = event.maxParticipants;
   const regPercent = maxP ? Math.min((regCount / maxP) * 100, 100) : 0;
   const isTrending = regCount >= 3;
-  const isLive = event.status === 'LIVE';
+  const isLive = event.status === 'LIVE' || timeUntil.isLive;
 
   return (
     <motion.div
@@ -143,6 +153,11 @@ function EventCard({ event, index, onRegister, registering, isFeatured }: {
                   ✓ Registered
                 </Badge>
               )}
+              {isLive && (
+                <Badge className="text-[10px] bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1" /> LIVE
+                </Badge>
+              )}
               {timeUntil.urgent && !isLive && (
                 <Badge className="text-[10px] bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300 animate-pulse">
                   <Timer className="w-2.5 h-2.5 mr-0.5" /> {timeUntil.text}
@@ -170,10 +185,13 @@ function EventCard({ event, index, onRegister, registering, isFeatured }: {
                 <Users className="w-3 h-3 shrink-0 text-primary/60" />
                 <span>{regCount} registered{maxP ? ` / ${maxP}` : ''}</span>
               </div>
-              {!isLive && !timeUntil.urgent && (
+              {!isLive && !timeUntil.urgent && !timeUntil.isLive && (
                 <span className="text-[10px] text-muted-foreground/70 flex items-center gap-0.5">
                   <Clock className="w-2.5 h-2.5" /> in {timeUntil.text}
                 </span>
+              )}
+              {timeUntil.text === 'Ended' && (
+                <span className="text-[10px] text-muted-foreground/70">Event ended</span>
               )}
             </div>
           </div>
@@ -320,7 +338,7 @@ export function EventFeed() {
             </div>
             <p className="text-sm text-muted-foreground">Discover and register for events at VVCE</p>
           </div>
-          {(user?.role === 'ORGANIZER' || user?.role === 'FACULTY' || user?.role === 'ADMIN') && (
+          {(user?.role === 'FACULTY' || user?.role === 'HOD' || user?.role === 'ADMIN') && (
             <Button onClick={() => navigate('create-event')} className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
               <Zap className="w-4 h-4 mr-2" /> Create Event
             </Button>
@@ -405,7 +423,7 @@ export function EventFeed() {
           </div>
           <p className="text-lg font-medium text-muted-foreground">No events found</p>
           <p className="text-sm text-muted-foreground/70 mt-1">Try adjusting your filters or check back later</p>
-          {(user?.role === 'ORGANIZER' || user?.role === 'FACULTY' || user?.role === 'ADMIN') && (
+          {(user?.role === 'FACULTY' || user?.role === 'HOD' || user?.role === 'ADMIN') && (
             <Button onClick={() => navigate('create-event')} className="mt-4 bg-primary hover:bg-primary/90">
               <Zap className="w-4 h-4 mr-2" /> Create One Now
             </Button>

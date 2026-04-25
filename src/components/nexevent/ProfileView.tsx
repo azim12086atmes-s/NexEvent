@@ -69,16 +69,18 @@ export function ProfileView() {
 
   const roleColors: Record<string, string> = {
     STUDENT: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300',
-    ORGANIZER: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
     FACULTY: 'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300',
+    HOD: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
     ADMIN: 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300',
+    OTHER: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   };
 
   const roleGradients: Record<string, string> = {
     STUDENT: 'from-emerald-500 to-teal-600',
-    ORGANIZER: 'from-amber-500 to-orange-600',
     FACULTY: 'from-violet-500 to-purple-600',
+    HOD: 'from-amber-500 to-orange-600',
     ADMIN: 'from-rose-500 to-pink-600',
+    OTHER: 'from-slate-500 to-gray-600',
   };
 
   const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);

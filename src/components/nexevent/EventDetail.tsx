@@ -10,7 +10,7 @@ import {
   QrCode, CheckCircle2, XCircle, Loader2, Tag, Building2,
   FileText, Download, ExternalLink, User as UserIcon,
   Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame,
-  Swords, Trophy, Layers, Target, Shield, UsersRound
+  Swords, Trophy, Layers, Target, Shield, UsersRound, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,11 +52,18 @@ function formatTime(d: string | Date) {
   return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function getTimeUntil(d: string | Date): string {
+function getTimeUntil(d: string | Date, endDate?: string | Date): string {
   const now = new Date();
   const target = new Date(d);
+  const end = endDate ? new Date(endDate) : null;
   const diff = target.getTime() - now.getTime();
-  if (diff < 0) return 'Started';
+  if (diff < 0) {
+    // Event has started - check if still ongoing
+    if (end && now.getTime() < end.getTime()) {
+      return 'LIVE NOW';
+    }
+    return 'Event ended';
+  }
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} to go`;
@@ -144,6 +151,18 @@ export function EventDetail() {
       navigator.clipboard.writeText(window.location.href);
       toast.success('Link copied to clipboard!');
     }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!user || !selectedEventId) return;
+    if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); return; }
+      toast.success('Event deleted successfully');
+      navigate(previousView || 'feed');
+    } catch { toast.error('Failed to delete event'); }
   };
 
   const generatePDF = async () => {
@@ -281,7 +300,7 @@ export function EventDetail() {
             )}
             {event.status === 'LIVE' || event.status === 'APPROVED' ? (
               <Badge className="text-xs bg-white/10 text-white/70 border-white/20 backdrop-blur-sm">
-                <Timer className="w-2.5 h-2.5 mr-1" /> {getTimeUntil(event.startDate)}
+                <Timer className="w-2.5 h-2.5 mr-1" /> {getTimeUntil(event.startDate, event.endDate)}
               </Badge>
             ) : null}
           </div>
@@ -738,6 +757,11 @@ export function EventDetail() {
                       <><Download className="w-3 h-3 mr-1" /> Generate PDF Report</>
                     )}
                   </Button>
+                  {event.status !== 'COMPLETED' && (
+                    <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive hover:bg-destructive/5" onClick={handleDeleteEvent}>
+                      <Trash2 className="w-3 h-3 mr-1" /> Delete Event
+                    </Button>
+                  )}
                 </>
               )}
             </CardContent>

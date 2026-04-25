@@ -52,13 +52,13 @@ export function QRScanner() {
     setIsCheckingIn(false);
   };
 
-  if (!user || (user.role !== 'FACULTY' && user.role !== 'ADMIN' && user.role !== 'ORGANIZER')) {
+  if (!user || (user.role !== 'FACULTY' && user.role !== 'ADMIN' && user.role !== 'HOD')) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <ScanLine className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
           <p className="text-lg font-medium">Access Restricted</p>
-          <p className="text-sm text-muted-foreground">Only faculty and organizers can scan QR codes.</p>
+          <p className="text-sm text-muted-foreground">Only faculty, HODs, and admins can scan QR codes.</p>
         </div>
       </div>
     );

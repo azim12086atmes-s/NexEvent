@@ -18,6 +18,7 @@ enum UserRole {
   FACULTY
   HOD
   ADMIN
+  OTHER
 }
 
 enum EventStatus {
@@ -99,6 +100,7 @@ model Department {
   clubs       Club[]
   events      Event[]
   users       User[]   @relation("DepartmentMembers")
+  clubCreationRequests ClubCreationRequest[]
 }
 
 // ============================================================
@@ -113,13 +115,14 @@ model User {
   email           String   @unique
   name            String
   avatar          String?
-  role            UserRole @default(STUDENT)
+  role            UserRole @default(OTHER)
   departmentId    String?                          // Which department they belong to
   usn             String?   // University Seat Number for students
   phone           String?
   passwordHash    String   @default("")
   isActive        Boolean  @default(true)
-  approvalStatus  UserApprovalStatus @default(APPROVED) // Admin must approve HOD/Faculty roles
+  approvalStatus  UserApprovalStatus @default(PENDING) // New users must be approved by admin
+  aictePoints     Float    @default(0) // AICTE activity points earned
   googleId        String?   // Google OAuth ID
   googleEmail     String?   // Google email (may differ from institutional)
   createdAt       DateTime @default(now())
@@ -150,7 +153,8 @@ model User {
   // Location tracking
   locationPings        LocationPing[]
   // Club creation requests
-  clubRequests         ClubCreationRequest[]
+  clubRequests         ClubCreationRequest[] @relation("ClubRequester")
+  reviewedClubRequests ClubCreationRequest[] @relation("ClubReviewer")
   // Approved clubs
   approvedClubs        Club[]       @relation("ClubApprover")
 }
@@ -321,6 +325,9 @@ model Event {
   eventType         String       @default("GENERAL") // GENERAL, COMPETITION
   // Department relation for department-wise events
   departmentId      String?      // If set, this is a department-specific event
+  // AICTE points
+  aictePoints       Float?       // Participation points for attendees
+  volunteerAictePoints Float?    // Points for volunteers
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -336,6 +343,7 @@ model Event {
   competitionConfig CompetitionConfig?
   teams             Team[]
   certificates      Certificate[]
+  locationPings     LocationPing[]
 }
 
 model EventRegistration {

@@ -28,6 +28,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Account is deactivated' }, { status: 403 });
     }
 
+    // Check approval status
+    if (user.approvalStatus === 'PENDING') {
+      return NextResponse.json({ error: 'Your account is pending admin approval' }, { status: 403 });
+    }
+
+    if (user.approvalStatus === 'REJECTED') {
+      return NextResponse.json({ error: 'Your account has been rejected' }, { status: 403 });
+    }
+
     const { passwordHash: _, ...userWithoutPassword } = user;
     return NextResponse.json({ user: userWithoutPassword, message: 'Login successful' });
   } catch (error) {
