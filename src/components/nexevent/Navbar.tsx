@@ -7,7 +7,7 @@ import { useUIStore } from '@/store/ui-store';
 import {
   Zap, Calendar, Users, Menu, X, LogOut,
   PlusCircle, LayoutDashboard, Shield, User, Search,
-  ScanLine, BookmarkCheck, Sparkles
+  ScanLine, BookmarkCheck, Sparkles, GraduationCap, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +27,15 @@ export function Navbar() {
   const navItems = isAuthenticated ? [
     { icon: Calendar, label: 'Events', view: 'feed' as const },
     ...(user?.role === 'STUDENT' || user?.role === 'OTHER'
-      ? [{ icon: BookmarkCheck, label: 'My Events', view: 'my-events' as const }]
+      ? [
+          { icon: GraduationCap, label: 'Dashboard', view: 'student-dashboard' as const },
+          { icon: BookmarkCheck, label: 'My Events', view: 'my-events' as const },
+        ]
+      : []),
+    ...(user?.role === 'HOD'
+      ? [
+          { icon: Building2, label: 'HOD Dashboard', view: 'hod-dashboard' as const },
+        ]
       : []),
     { icon: Users, label: 'Clubs', view: 'clubs' as const },
     ...(user?.role === 'FACULTY' || user?.role === 'HOD' || user?.role === 'ADMIN'

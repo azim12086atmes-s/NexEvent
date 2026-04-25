@@ -82,8 +82,34 @@ export async function POST(
       },
     });
 
+    // Auto-award AICTE points if event has them configured
+    let aictePointsAwarded = 0;
+    if (event.aictePoints && event.aictePoints > 0) {
+      try {
+        await db.user.update({
+          where: { id: userId },
+          data: { aictePoints: { increment: event.aictePoints } },
+        });
+        aictePointsAwarded = event.aictePoints;
+
+        // Notify user about AICTE points
+        await db.notification.create({
+          data: {
+            userId,
+            title: 'AICTE Points Awarded! 🏆',
+            message: `You earned ${event.aictePoints} AICTE points for attending "${event.title}"`,
+            type: 'success',
+          },
+        });
+      } catch (e) {
+        console.error('AICTE points award error:', e);
+        // Don't fail check-in if points award fails
+      }
+    }
+
     return NextResponse.json({
       attendance,
+      aictePointsAwarded,
       message: isWithinFence
         ? (isLate ? 'Checked in (Late)' : 'Checked in successfully')
         : 'Warning: You are outside the event venue radius. Attendance flagged.',

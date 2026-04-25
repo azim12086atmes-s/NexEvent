@@ -592,3 +592,273 @@ The application is stable with all major user workflows functional:
 - **UI**: Added "Delete Event" button in EventDetail sidebar for organizers
 
 ### Lint: All changes pass `bun run lint` with zero errors ✅
+
+---
+
+## Session 9 Changes (Phase 4 - Scoring/Judging System)
+
+### Task ID: 4 - Phase 4: Score API, Judge Scoring UI, Results View
+
+### 1. Scores API Route (`/api/events/[id]/scores/route.ts`) - NEW
+- **GET**: Dual-mode score retrieval
+  - Raw mode: Returns filtered scores with roundId, judgeId, targetId params; includes judge and round info
+  - Aggregate mode (`?aggregate=true`): Returns ranked results per team/participant
+    - Calculates per-criterion average across all judges
+    - Applies round weights for per-round and total scores
+    - Supports CUMULATIVE, AVERAGE, BEST_OF scoring types
+    - Returns team info (name, leader, status, members) for team-based targets
+    - Results sorted by total score descending with rank
+- **POST**: Submit/update scores with validation
+  - Required: roundId, targetId, criterionName, score, maxScore, judgeId
+  - Validates score range (0 to maxScore)
+  - Checks SCORE_PARTICIPANTS permission via event role assignments
+  - Also allows organizer, admin, faculty, HOD (privileged)
+  - Enforces round.scoringOpen and scoringDeadline (privileged users bypass)
+  - Upsert logic: creates new or updates existing score (unique constraint: roundId + judgeId + targetId + criterionName)
+- **PUT**: Toggle scoring open/close for a round
+  - Required: roundId, userId, scoringOpen (boolean)
+  - Only organizer, admin, faculty, HOD can toggle
+  - Optionally updates scoringDeadline
+- Added `getUserEventPermissions()` helper: centralized permission resolution checking event role assignments and privileged roles
+
+### 2. Event Role Assignments GET Handler (`/api/events/[id]/roles/assign/route.ts`) - ADDED
+- Added GET handler to list event role assignments
+- Filterable by userId query param
+- Returns assignments with user and role details
+- Enables client-side permission checking for scoring/results access
+
+### 3. JudgeScoring Component (`/components/nexevent/JudgeScoring.tsx`) - NEW
+- Full-featured scoring interface for competition judges
+- **Header**: Event name, "Judge Scoring" title, competition badge
+- **Round Selector**: Tabs showing all rounds with scoring status (Lock/Unlock icons)
+- **Round Info Card**: Round name, max score, weight, scoring status badge, deadline, elimination flag; organizer toggle button
+- **Scoring Grid**: Interactive table
+  - Rows: Teams and individual participants
+  - Columns: Each criterion from the round's criteria JSON
+  - Cells: Number inputs (0 to maxScore) with visual feedback
+    - Green border + checkmark: saved
+    - Amber border + alert icon: pending
+    - Spinner: saving
+  - Auto-save on blur, explicit "Save" button per row
+  - Expandable rows for judge comments per criterion
+  - Criteria totals footer row
+- **Permission Checking**: Checks SCORE_PARTICIPANTS permission via event role assignments; also allows privileged roles
+
+### 4. ResultsView Component (`/components/nexevent/ResultsView.tsx`) - NEW
+- Comprehensive results/leaderboard for competition events
+- **Podium Display**: Top 3 with gold/silver/bronze styling and animated reveal
+  - Crown icon for 1st, Medal for 2nd, Award for 3rd
+  - Color-coded cards with gradient backgrounds
+- **Full Ranking Table**: Expandable rows
+  - Per-round score breakdown columns
+  - Click to expand: per-criterion breakdown with progress bars and judge counts
+  - Rank styling: gold/silver/bronze for top 3, numbered for others
+- **PDF Export**: Full results PDF with jsPDF + autoTable
+  - Event header with colored banner
+  - Main rankings table with round breakdowns
+  - Per-criterion detailed breakdown for top 10
+- **Permission Checking**: VIEW_RESULTS permission via event role assignments
+
+### 5. UI Store Updates (`/store/ui-store.ts`)
+- Added `'judge-scoring'` and `'results'` to ViewName type
+- Updated navigate function to preserve selectedEventId for 'judge-scoring' and 'results' views (using `['event-detail', 'judge-scoring', 'results'].includes(view)`)
+
+### 6. Page Integration (`/app/page.tsx`)
+- Added JudgeScoring and ResultsView imports
+- Added renderView cases for 'judge-scoring' and 'results'
+
+### 7. EventDetail Integration (`/components/nexevent/EventDetail.tsx`)
+- Added `canScore` and `canViewResults` state variables
+- Added permission checking on event load for competition events
+  - Fetches event role assignments for current user
+  - Parses permissions from each assigned role
+  - Checks for SCORE_PARTICIPANTS and VIEW_RESULTS
+  - Also checks privileged roles (organizer, admin, faculty, HOD)
+- Added "Score Participants" button (ClipboardCheck icon) - visible when canScore
+- Added "View Results" button (BarChart3 icon) - visible when canViewResults
+- Both buttons navigate to respective views with event ID preserved
+
+### 8. Lint & Quality
+- All code passes `bun run lint` with zero errors ✅
+
+---
+
+## Current State Assessment (Post-Phase 4)
+The application now has a complete competition scoring system:
+- **Competition Events**: ✅ Create with rounds/criteria, view config/teams/roles
+- **Judge Scoring**: ✅ Score participants per criterion per round, auto-save, visual feedback
+- **Scoring Management**: ✅ Toggle scoring open/close per round, deadline enforcement
+- **Results & Leaderboard**: ✅ Aggregated rankings with per-criterion breakdown, PDF export
+- **Permission System**: ✅ SCORE_PARTICIPANTS and VIEW_RESULTS via event role assignments
+
+## Known Remaining Issues
+1. **Team Registration**: Students can't form/join teams from the UI yet
+2. **Club Search**: No search/filter on clubs view
+3. **Demo Scoring Data**: No pre-seeded scores for demonstration purposes
+
+---
+
+## Session 10 Changes (Task 3+4 - Faculty Dashboard Enhancement & Club Creation Flow)
+
+### Task ID: 3+4 - Faculty Dashboard Enhancement, Club Creation Request Flow
+
+### 1. Club Creation Request POST API (`/api/clubs/creation-requests/route.ts`)
+- **Added POST handler** for faculty to create club creation requests
+- Body accepts: `{ name, slug, description, category, requestedById, departmentId, facultyAdvisorId?, autoJoin?, requireApproval? }`
+- Validates requester is FACULTY role (403 if not)
+- Auto-resolves `hodId` from the department's `hodId` field
+- Checks for existing club with same slug (409 conflict)
+- Checks for existing pending request with same name (409 conflict)
+- Creates ClubCreationRequest with status PENDING
+- Returns 201 with the created request including related data
+- **Also added** `requestedById` filter parameter to existing GET handler
+
+### 2. OrganizerDashboard Complete Rewrite (`/src/components/nexevent/OrganizerDashboard.tsx`)
+
+#### Removed: "My Events" section
+- The list of events with "My Events" heading has been removed
+- Replaced with more useful content sections
+
+#### Added: "Request New Club" dialog/button
+- "Request Club" button with Building2 icon next to "New Event" button
+- Only visible for FACULTY role users
+- Opens a Dialog form with:
+  - Club Name (required)
+  - Slug (auto-generated from name, customizable)
+  - Description (required, textarea)
+  - Category select (TECHNICAL, CULTURAL, SPORTS, etc.)
+  - Department select (auto-detects user's department)
+  - Auto-Join toggle
+  - Require Approval toggle
+- On submit, POSTs to `/api/clubs/creation-requests`
+- Shows success toast and refreshes club requests list
+
+#### Added: "My Club Requests" section (replaces "My Events")
+- Fetches club creation requests by current user
+- Grid layout with animated cards
+- Status badges: PENDING (amber/Clock), APPROVED (emerald/CheckCircle2), REJECTED (red/XCircle)
+- Shows department, category, creation date, auto-join flag
+- Rejected requests show rejection reason in red alert box
+- Approved requests show "View Club" link navigating to club-detail
+- Empty state with rotating dashed border animation
+
+#### Added: "Assign Student Organizer" section
+- Below registration overview, for events with a club
+- Each event card shows:
+  - Crown icon with event title and club member count
+  - Currently assigned organizers as violet badges
+  - Expandable "Assign" form with student selector from club members
+  - Assign button creates/finds Organizer event role
+  - Permissions: CREATE_EVENT, EDIT_EVENT, MANAGE_REGISTRATIONS
+  - Calls POST `/api/events/[id]/roles/assign` for assignment
+  - Auto-creates Organizer role via POST `/api/events/[id]/roles` if none exists
+- Empty state when no club events exist
+
+#### Added: "Events Quick Access" section
+- Grid of compact event cards replacing old list-style "My Events"
+- Status badges, date, venue, registration count
+- Report download and View buttons
+- Hover scale animation
+
+### 3. Code Quality
+- Fixed `react-hooks/set-state-in-effect` lint error: converted slug auto-generation from useEffect to inline in handleClubFormChange
+- Fixed `react-hooks/set-state-in-effect` lint error: converted loadData from useCallback to inline async function in useEffect with cleanup
+- All code passes `bun run lint` with zero errors ✅
+
+---
+
+## Session 10 Changes (Major Feature Completion - All Phases)
+
+### Phase Completion Summary
+- **Phase 1: Schema + Core Roles** ✅ COMPLETE (previous session)
+- **Phase 2: Admin Panel + CSV Upload** ✅ COMPLETE (previous session)
+- **Phase 3: HOD Dashboard + Club Approval** ✅ COMPLETE
+- **Phase 4: Scoring/Judging System** ✅ COMPLETE (previous session)
+- **Phase 5: Certificate System** ✅ COMPLETE
+- **Phase 6: AICTE Points** ✅ COMPLETE
+- **Phase 7: Bug Fixes (LIVE status + delete)** ✅ COMPLETE (previous session)
+- **Phase 8: Geo-Fence Tracking** ✅ COMPLETE
+- **Phase 9: Google OAuth** ⬜ Not yet implemented
+
+### New Components Created
+
+1. **StudentDashboard** (`/src/components/nexevent/StudentDashboard.tsx`)
+   - Full student dashboard with 6 sections: Stats cards, AICTE Points breakdown, Recent Registrations, Club Memberships, Certificates, Quick Actions
+   - Navigated via "Dashboard" (GraduationCap icon) in navbar for STUDENT/OTHER roles
+   - ViewName: `'student-dashboard'`
+
+2. **HODDashboard** (`/src/components/nexevent/HODDashboard.tsx`)
+   - Department overview for HODs: Stats, Pending Club Creation Requests, Department Clubs, Faculty, Students, Events, Request History
+   - Approve/reject club creation requests with inline confirmation and rejection reason
+   - ViewName: `'hod-dashboard'`, Navbar: "HOD Dashboard" (Building2 icon) for HOD role
+
+3. **CertificateManagement** (`/src/components/nexevent/CertificateManagement.tsx`)
+   - Create certificate templates, auto-issue to participants, generate PDFs
+   - Tabbed interface: Templates | Issued Certificates
+   - Supports round-specific and event-wide certificates
+   - Download PDF functionality via base64→Blob browser download
+   - ViewName: `'certificates'`, accessible from EventDetail sidebar
+
+### New API Routes Created
+
+4. **`/api/departments/my/route.ts`** — HOD's department data
+   - GET: Returns department with clubs, events, users, club creation requests, computed stats
+
+5. **`/api/clubs/creation-requests/route.ts`** — Enhanced with POST handler
+   - GET: List with filters (departmentId, status, hodId, requestedById)
+   - POST: Faculty creates club request (auto-resolves HOD from department)
+   - PUT: HOD/Admin approves (creates Club) or rejects (with reason)
+
+6. **`/api/events/[id]/location-pings/route.ts`** — Real-time geo-fence tracking
+   - POST: Submit location ping, calculates isWithinFence, updates attendance % (totalPingsInFence/totalPings)
+   - GET: Organizer view of pings + attendance summary with per-user attendance percentages
+
+### Existing Components Enhanced
+
+7. **OrganizerDashboard** — Complete rewrite
+   - Removed "My Events" section (faculty/admin/HOD don't need it)
+   - Added "Request Club" dialog for faculty (name, slug, description, category, department, auto-join, require-approval)
+   - Added "My Club Requests" section with status badges (PENDING/APPROVED/REJECTED)
+   - Added "Assign Student Organizer" section (assign event roles to students)
+   - Added "Events Quick Access" compact grid
+
+8. **EventDetail** — Enhanced
+   - Added AICTE Points info card (shows participation + volunteer points)
+   - Added attendance percentage display in registration list
+   - Added geo-fence explanation section (attendance tracked via periodic pings)
+   - Added "Manage Certificates" button in sidebar
+
+9. **EventFeed** — Enhanced
+   - Added department filter dropdown (loads departments from API)
+   - Added AICTE points badge on event cards (amber Award badge)
+   - Department filter clears with "Clear Filters" button
+
+10. **QRScanner** — Complete rewrite with camera support
+    - Camera scanning mode using html5-qrcode library
+    - Manual input mode as fallback
+    - Event selection dropdown (loads active events)
+    - Auto-detect QR codes via camera
+    - Geo-fence indicator and attendance percentage display
+
+11. **ProfileView** — Enhanced
+    - Added AICTE Points stat card (4th card in activity grid)
+    - Grid changed from 3 to 4 columns
+
+### Navigation Updates
+
+12. **Navbar** — Updated for all roles
+    - STUDENT/OTHER: Dashboard (GraduationCap) + My Events (BookmarkCheck) + Clubs
+    - HOD: HOD Dashboard (Building2) + Events + Clubs + Dashboard + Create + Admin + Scan QR
+    - FACULTY/ADMIN: Events + Clubs + Dashboard + Create + Admin + Scan QR
+
+13. **ui-store.ts** — New ViewNames
+    - Added `'student-dashboard'`, `'hod-dashboard'`, `'certificates'`
+    - Updated navigate to preserve selectedEventId for `'certificates'` view
+
+14. **page.tsx** — New renderView cases
+    - Added StudentDashboard, HODDashboard, CertificateManagement
+
+### Packages Added
+- `html5-qrcode@2.3.8` — Camera-based QR code scanning
+
+### Lint Status: ✅ Zero errors

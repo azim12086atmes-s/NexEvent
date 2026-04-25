@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const userId = request.nextUrl.searchParams.get('userId');
+
+    const where: any = { role: { eventId: id } };
+    if (userId) where.userId = userId;
+
+    const assignments = await db.eventRoleAssignment.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, email: true, avatar: true } },
+        role: true,
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+
+    return NextResponse.json({ assignments });
+  } catch (error) {
+    console.error('Event role assignments fetch error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

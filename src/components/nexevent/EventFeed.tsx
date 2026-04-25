@@ -8,7 +8,7 @@ import { useEventStore, EventCategory } from '@/store/event-store';
 import {
   Calendar, MapPin, Clock, Users, Filter, Search,
   Sparkles, Zap, Loader2, ArrowUpRight, TrendingUp,
-  Radio, Timer, Hash, Flame, Swords
+  Radio, Timer, Hash, Flame, Swords, Award, Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -146,6 +146,11 @@ function EventCard({ event, index, onRegister, registering, isFeatured }: {
                   <Swords className="w-2.5 h-2.5 mr-0.5" /> Competition
                 </Badge>
               )}
+              {(event as any).aictePoints > 0 && (
+                <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                  <Award className="w-2.5 h-2.5 mr-0.5" /> {(event as any).aictePoints} pts
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1.5">
               {(event as any).userRegistration && (
@@ -235,8 +240,21 @@ export function EventFeed() {
   const [registering, setRegistering] = useState<string | null>(null);
   const [activeCategoryPill, setActiveCategoryPill] = useState<EventCategory | null>(null);
   const [showCompetitionsOnly, setShowCompetitionsOnly] = useState(false);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
+
+  // Load departments for filter
+  useEffect(() => {
+    const loadDepts = async () => {
+      try {
+        const res = await fetch('/api/admin/departments');
+        if (res.ok) { const d = await res.json(); setDepartments(d.departments || []); }
+      } catch {}
+    };
+    loadDepts();
+  }, []);
 
   // Sync searchQuery from UI store to event store filters for server-side search
   useEffect(() => {
@@ -265,8 +283,12 @@ export function EventFeed() {
     if (showCompetitionsOnly) {
       result = result.filter(e => (e as any).eventType === 'COMPETITION');
     }
+    // Department filter
+    if (selectedDepartment) {
+      result = result.filter(e => (e as any).departmentId === selectedDepartment);
+    }
     return result;
-  }, [events, searchQuery, filters.category, activeCategoryPill, showCompetitionsOnly]);
+  }, [events, searchQuery, filters.category, activeCategoryPill, showCompetitionsOnly, selectedDepartment]);
 
   const handleRegister = async (eventId: string) => {
     setRegistering(eventId);
@@ -395,8 +417,22 @@ export function EventFeed() {
           onClick={() => setShowCompetitionsOnly(!showCompetitionsOnly)}>
           <Swords className="w-3 h-3 mr-1" /> Competitions
         </Button>
-        {(activeCategoryPill || filters.category || showCompetitionsOnly) && (
-          <Button variant="ghost" size="sm" onClick={() => { setActiveCategoryPill(null); clearFilters(); setShowCompetitionsOnly(false); }}>
+        {departments.length > 0 && (
+          <Select value={selectedDepartment || '_all'} onValueChange={(v) => setSelectedDepartment(v === '_all' ? null : v)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <Building2 className="w-3 h-3 mr-1" />
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Depts</SelectItem>
+              {departments.map((d: any) => (
+                <SelectItem key={d.id} value={d.id}>{d.code} - {d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {(activeCategoryPill || filters.category || showCompetitionsOnly || selectedDepartment) && (
+          <Button variant="ghost" size="sm" onClick={() => { setActiveCategoryPill(null); clearFilters(); setShowCompetitionsOnly(false); setSelectedDepartment(null); }}>
             Clear Filters
           </Button>
         )}

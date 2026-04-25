@@ -198,11 +198,12 @@ export function ProfileView() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {[
                   { value: profile._count?.registrations || 0, label: 'Registrations', icon: Calendar, color: 'text-violet-600 bg-violet-100 dark:bg-violet-900/30' },
                   { value: profile._count?.attendances || 0, label: 'Check-ins', icon: Award, color: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30' },
                   { value: profile._count?.organizedEvents || 0, label: 'Organized', icon: Users, color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30' },
+                  { value: profile.aictePoints || 0, label: 'AICTE Pts', icon: Zap, color: 'text-rose-600 bg-rose-100 dark:bg-rose-900/30' },
                 ].map((s, i) => (
                   <motion.div
                     key={i}

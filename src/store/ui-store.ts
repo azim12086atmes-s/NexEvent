@@ -5,6 +5,8 @@ export type ViewName =
   | 'feed'
   | 'event-detail'
   | 'dashboard'
+  | 'student-dashboard'
+  | 'hod-dashboard'
   | 'admin'
   | 'profile'
   | 'clubs'
@@ -12,6 +14,9 @@ export type ViewName =
   | 'my-events'
   | 'create-event'
   | 'scan-qr'
+  | 'judge-scoring'
+  | 'results'
+  | 'certificates'
   | 'login'
   | 'register';
 
@@ -51,7 +56,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
     set({
       previousView: state.currentView,
       currentView: view,
-      selectedEventId: view === 'event-detail' ? (id || null) : null,
+      selectedEventId: ['event-detail', 'judge-scoring', 'results', 'certificates'].includes(view) ? (id || state.selectedEventId) : null,
       selectedClubId: view === 'club-detail' ? (id || state.selectedClubId) : null,
       sidebarOpen: false,
     });

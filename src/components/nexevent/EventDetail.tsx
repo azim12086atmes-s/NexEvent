@@ -10,7 +10,8 @@ import {
   QrCode, CheckCircle2, XCircle, Loader2, Tag, Building2,
   FileText, Download, ExternalLink, User as UserIcon,
   Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame,
-  Swords, Trophy, Layers, Target, Shield, UsersRound, Trash2
+  Swords, Trophy, Layers, Target, Shield, UsersRound, Trash2,
+  ClipboardCheck, BarChart3, Award
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +82,8 @@ export function EventDetail() {
   const [userReg, setUserReg] = useState<any>(null);
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [canScore, setCanScore] = useState(false);
+  const [canViewResults, setCanViewResults] = useState(false);
 
   useEffect(() => {
     if (selectedEventId) {
@@ -95,6 +98,32 @@ export function EventDetail() {
       if (res.ok) {
         const data = await res.json();
         setUserReg(data.userRegistration);
+
+        // Check scoring/results permissions for competition events
+        if (user && data.event?.eventType === 'COMPETITION') {
+          const isPrivileged = user.role === 'ADMIN' || user.role === 'FACULTY' || user.role === 'HOD' || data.event.organizerId === user.id;
+          try {
+            const assignmentsRes = await fetch(`/api/events/${selectedEventId}/roles/assign?userId=${user.id}`);
+            if (assignmentsRes.ok) {
+              const roleData = await assignmentsRes.json();
+              const permissions = new Set<string>();
+              for (const a of (roleData.assignments || [])) {
+                try {
+                  const perms: string[] = JSON.parse(a.role?.permissions || '[]');
+                  perms.forEach(p => permissions.add(p));
+                } catch { /* ignore */ }
+              }
+              setCanScore(isPrivileged || permissions.has('SCORE_PARTICIPANTS'));
+              setCanViewResults(isPrivileged || permissions.has('VIEW_RESULTS'));
+            } else {
+              setCanScore(isPrivileged);
+              setCanViewResults(isPrivileged);
+            }
+          } catch {
+            setCanScore(isPrivileged);
+            setCanViewResults(isPrivileged);
+          }
+        }
       }
     };
     loadDetail();
@@ -367,6 +396,23 @@ export function EventDetail() {
                 </div>
               </CardContent>
             </Card>
+            {/* AICTE Points Card */}
+            {(event.aictePoints > 0 || event.volunteerAictePoints > 0) && (
+              <Card className="bg-card/80 backdrop-blur-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                    <Award className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">AICTE Points</p>
+                    <p className="text-sm font-medium">
+                      {event.aictePoints || 0} participation
+                      {event.volunteerAictePoints ? ` • ${event.volunteerAictePoints} volunteer` : ''}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
 
           {/* Registration Progress */}
@@ -600,6 +646,9 @@ export function EventDetail() {
                           {r.attendance && (
                             <Badge className="text-[10px] bg-emerald-100 text-emerald-700">
                               <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> In
+                              {r.attendance.attendancePercentage > 0 && (
+                                <span className="ml-1">{Math.round(r.attendance.attendancePercentage)}%</span>
+                              )}
                             </Badge>
                           )}
                         </div>
@@ -747,6 +796,50 @@ export function EventDetail() {
                 </div>
               )}
 
+              {/* Competition Actions */}
+              {event.eventType === 'COMPETITION' && (canScore || canViewResults) && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    {canScore && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => navigate('judge-scoring', selectedEventId!)}
+                      >
+                        <ClipboardCheck className="w-3 h-3 mr-1" /> Score Participants
+                      </Button>
+                    )}
+                    {canViewResults && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => navigate('results', selectedEventId!)}
+                      >
+                        <BarChart3 className="w-3 h-3 mr-1" /> View Results
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Manage Certificates - visible to organizer/admin/faculty/HOD */}
+              {user && (isOrganizer || user.role === 'FACULTY' || user.role === 'HOD') && (
+                <>
+                  <Separator />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => navigate('certificates', selectedEventId!)}
+                  >
+                    <Award className="w-3 h-3 mr-1" /> Manage Certificates
+                  </Button>
+                </>
+              )}
+
               {isOrganizer && (
                 <>
                   <Separator />
@@ -771,12 +864,17 @@ export function EventDetail() {
           {event.geoFenceRadius && (
             <Card className="bg-chart-2/5 border-chart-2/20">
               <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs mb-2">
                   <MapPin className="w-4 h-4 text-chart-2" />
                   <div>
                     <p className="font-medium">Geo-fenced Event</p>
                     <p className="text-muted-foreground">Must be within {event.geoFenceRadius}m of venue for check-in</p>
                   </div>
+                </div>
+                <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2 pt-2 border-t border-border/30">
+                  <p>• Attendance tracked via periodic location pings</p>
+                  <p>• Attendance % = time spent within fence ÷ event duration</p>
+                  <p>• Location pings are logged in real-time during the event</p>
                 </div>
               </CardContent>
             </Card>

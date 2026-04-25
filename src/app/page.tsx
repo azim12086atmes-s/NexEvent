@@ -22,6 +22,11 @@ import { ClubDetailPage } from '@/components/nexevent/ClubDetailPage';
 import { MyEvents } from '@/components/nexevent/MyEvents';
 import { CreateEventForm } from '@/components/nexevent/CreateEventForm';
 import { QRScanner } from '@/components/nexevent/QRScanner';
+import { JudgeScoring } from '@/components/nexevent/JudgeScoring';
+import { ResultsView } from '@/components/nexevent/ResultsView';
+import { CertificateManagement } from '@/components/nexevent/CertificateManagement';
+import { StudentDashboard } from '@/components/nexevent/StudentDashboard';
+import { HODDashboard } from '@/components/nexevent/HODDashboard';
 
 export default function NexEventApp() {
   const { user, isAuthenticated, checkAuth } = useAuthStore();
@@ -46,6 +51,8 @@ export default function NexEventApp() {
       case 'feed': return <EventFeed />;
       case 'event-detail': return <EventDetail />;
       case 'dashboard': return <OrganizerDashboard />;
+      case 'student-dashboard': return <StudentDashboard />;
+      case 'hod-dashboard': return <HODDashboard />;
       case 'admin': return <AdminPanel />;
       case 'profile': return <ProfileView />;
       case 'clubs': return <ClubsView />;
@@ -53,6 +60,9 @@ export default function NexEventApp() {
       case 'my-events': return <MyEvents />;
       case 'create-event': return <CreateEventForm />;
       case 'scan-qr': return <QRScanner />;
+      case 'judge-scoring': return <JudgeScoring />;
+      case 'results': return <ResultsView />;
+      case 'certificates': return <CertificateManagement />;
       default: return <LandingPage />;
     }
   };
