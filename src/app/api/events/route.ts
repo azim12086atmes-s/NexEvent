@@ -17,8 +17,17 @@ export async function GET(request: NextRequest) {
     const where: any = {};
 
     if (category) where.category = category;
-    if (status && status !== 'ALL') where.status = status;
-    else if (!status) where.status = { in: ['APPROVED', 'LIVE', 'COMPLETED'] };
+    if (status && status !== 'ALL') {
+      // Support comma-separated status values like "APPROVED,LIVE"
+      const statusValues = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statusValues.length === 1) {
+        where.status = statusValues[0];
+      } else if (statusValues.length > 1) {
+        where.status = { in: statusValues };
+      }
+    } else if (!status) {
+      where.status = { in: ['APPROVED', 'LIVE', 'COMPLETED'] };
+    }
     if (clubId) where.clubId = clubId;
     if (search) {
       where.OR = [

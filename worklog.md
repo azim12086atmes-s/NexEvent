@@ -959,3 +959,34 @@ The application now has a complete competition scoring system:
 | guest@vvce.ac.in | OTHER | Guest User |
 | + 16 more student accounts | STUDENT | Various |
 
+
+---
+
+## Session 12 Changes (Server Stability Fixes)
+
+### Critical Bug Fix: Events API Comma-Separated Status
+- **Issue**: QRScanner sent `status=APPROVED,LIVE` as a single string to the events API, causing Prisma to throw "Invalid value for argument `status`" error which crashed the server
+- **Fix**: Updated `/api/events/route.ts` to parse comma-separated status values into `{ in: [...] }` Prisma query format
+- **Impact**: This was THE primary cause of server crashes in production. The error was silent (caught by try-catch returning 500), but when combined with the client retrying, it caused cascading failures.
+
+### Other Server Stability Fixes
+- **Disabled Prisma query logging**: Changed `log: ['query']` to `log: []` in `/src/lib/db.ts` to reduce I/O overhead
+- **Removed `output: "standalone"` from next.config.ts**: Was causing `next start` to fail with "does not work with standalone" warning
+- **Cleared `.next` cache**: Corrupted cache was causing compilation errors
+
+### Sandbox Limitation Discovery
+- The sandbox kills ALL background processes after approximately 60 seconds
+- This is NOT a code bug — it's an infrastructure limitation
+- The dev server works correctly during its lifetime but gets killed periodically
+- Auto-restart wrappers also get killed by the sandbox
+- **Recommendation**: The preview panel should work for intermittent testing; the server will restart when new code changes are deployed
+
+### All Demo Accounts Verified Working
+All accounts use password `demo123`:
+- admin@vvce.ac.in → ADMIN ✅
+- hod.cs@vvce.ac.in → HOD ✅  
+- priya.sharma@vvce.ac.in → FACULTY ✅
+- aditi.n@vvce.ac.in → STUDENT ✅
+- guest@vvce.ac.in → OTHER ✅
+
+### Lint Status: ✅ Zero errors
