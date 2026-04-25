@@ -9,7 +9,7 @@ import {
   Calendar, MapPin, Clock, Users, Tag, Loader2,
   CheckCircle2, Building2, Shield, AlertCircle, Plus, Trash2,
   Trophy, Target, Layers, UserPlus, ChevronDown, ChevronUp,
-  Sparkles, Swords
+  Sparkles, Swords, Navigation
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { LocationPicker } from './LocationPicker';
 
 const categories: { value: EventCategory; label: string; icon: string }[] = [
   { value: 'TECHNICAL', label: 'Technical', icon: '⚡' },
@@ -341,21 +342,31 @@ export function CreateEventForm() {
             </CardContent>
           </Card>
 
+          {/* Geo-fence & Location */}
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><Navigation className="w-4 h-4 text-primary" /> Geo-fence & Location</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <LocationPicker
+                latitude={form.venueLat}
+                longitude={form.venueLng}
+                radius={form.geoFenceRadius}
+                onLocationChange={(lat, lng) => setForm({ ...form, venueLat: lat, venueLng: lng })}
+                onRadiusChange={(r) => setForm({ ...form, geoFenceRadius: r })}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Set the venue location on the map to enable geo-fenced attendance. Students must be within the specified radius to check in.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Settings */}
           <Card>
             <CardHeader><CardTitle className="text-base flex items-center gap-2"><Shield className="w-4 h-4 text-primary" /> Settings</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Max Participants</Label>
-                  <Input type="number" placeholder="Leave empty for unlimited" value={form.maxParticipants}
-                    onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} className="h-9" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Geo-fence Radius (meters)</Label>
-                  <Input type="number" placeholder="200" value={form.geoFenceRadius}
-                    onChange={(e) => setForm({ ...form, geoFenceRadius: e.target.value })} className="h-9" />
-                </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Max Participants</Label>
+                <Input type="number" placeholder="Leave empty for unlimited" value={form.maxParticipants}
+                  onChange={(e) => setForm({ ...form, maxParticipants: e.target.value })} className="h-9" />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="flex items-center gap-3">

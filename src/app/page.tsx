@@ -27,6 +27,7 @@ import { ResultsView } from '@/components/nexevent/ResultsView';
 import { CertificateManagement } from '@/components/nexevent/CertificateManagement';
 import { StudentDashboard } from '@/components/nexevent/StudentDashboard';
 import { HODDashboard } from '@/components/nexevent/HODDashboard';
+import { FacultyDashboard } from '@/components/nexevent/FacultyDashboard';
 
 export default function NexEventApp() {
   const { user, isAuthenticated, checkAuth } = useAuthStore();
@@ -53,6 +54,7 @@ export default function NexEventApp() {
       case 'dashboard': return <OrganizerDashboard />;
       case 'student-dashboard': return <StudentDashboard />;
       case 'hod-dashboard': return <HODDashboard />;
+      case 'faculty-dashboard': return <FacultyDashboard />;
       case 'admin': return <AdminPanel />;
       case 'profile': return <ProfileView />;
       case 'clubs': return <ClubsView />;

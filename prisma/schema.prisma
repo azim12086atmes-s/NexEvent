@@ -53,6 +53,7 @@ enum AttendanceStatus {
   PRESENT
   ABSENT
   LATE
+  CHECKED_OUT
 }
 
 enum ClubApprovalStatus {

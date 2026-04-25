@@ -30,6 +30,7 @@ export function Navbar() {
       ? [
           { icon: GraduationCap, label: 'Dashboard', view: 'student-dashboard' as const },
           { icon: BookmarkCheck, label: 'My Events', view: 'my-events' as const },
+          { icon: ScanLine, label: 'Check In', view: 'scan-qr' as const },
         ]
       : []),
     ...(user?.role === 'HOD'
@@ -38,14 +39,21 @@ export function Navbar() {
         ]
       : []),
     { icon: Users, label: 'Clubs', view: 'clubs' as const },
-    ...(user?.role === 'FACULTY' || user?.role === 'HOD' || user?.role === 'ADMIN'
+    ...(user?.role === 'FACULTY'
       ? [
-          { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard' as const },
+          { icon: LayoutDashboard, label: 'Dashboard', view: 'faculty-dashboard' as const },
           { icon: PlusCircle, label: 'Create', view: 'create-event' as const },
           { icon: Shield, label: 'Admin', view: 'admin' as const },
           { icon: ScanLine, label: 'Scan QR', view: 'scan-qr' as const },
         ]
-      : []),
+      : user?.role === 'HOD' || user?.role === 'ADMIN'
+        ? [
+            { icon: LayoutDashboard, label: 'Dashboard', view: 'dashboard' as const },
+            { icon: PlusCircle, label: 'Create', view: 'create-event' as const },
+            { icon: Shield, label: 'Admin', view: 'admin' as const },
+            { icon: ScanLine, label: 'Scan QR', view: 'scan-qr' as const },
+          ]
+        : []),
   ] : [];
 
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);

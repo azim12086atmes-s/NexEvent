@@ -1142,3 +1142,131 @@ Stage Summary:
 - **Club visibility**: Faculty sees "My Clubs" in dashboard, students already have "Club Memberships"
 - **QR code flow**: Fully functional — register → show QR → scan → check-in with student info
 - **Attendance API**: Fixed critical bug where faculty ID was used instead of student ID
+
+---
+
+## Session 10 Changes (Task 3 - FacultyDashboard Component)
+
+### Task ID: 3 - Create a FacultyDashboard Component
+
+### 1. Created FacultyDashboard Component (`/src/components/nexevent/FacultyDashboard.tsx`) - NEW
+- **Header Banner**: Gradient (violet/purple theme) with faculty name, department info, role badge (Crown icon), floating particles animation
+- **Stats Cards**: 4-card grid with gradient backgrounds:
+  - Clubs Managed (count of clubs where faculty is advisor)
+  - Events Created (total events organized)
+  - Total Registrations (across all events)
+  - Check-ins Scanned (recent attendance records)
+- **My Clubs Section**: Grid of club cards showing:
+  - Role badges: "Faculty Advisor" with Crown icon vs "Member"
+  - Member count and event count per club
+  - Clickable cards navigating to club-detail view
+  - Empty state with rotating dashed border animation
+- **My Events Section**: List of events organized by this faculty:
+  - Status badges with color coding (LIVE, APPROVED, PENDING, etc.)
+  - Competition event badge
+  - Category badges
+  - Registration progress bars
+  - Quick action buttons: "Check-in QR" and "View"
+  - Empty state with rotating dashed border animation
+- **QR Code Management Section**: 
+  - Lists active events (LIVE/APPROVED) with "Generate QR" buttons
+  - Each button opens a dialog showing QRCodeSVG with value `NEXEVENT-CHECKIN-{eventId}`
+  - Dialog includes QR code display, code value, "Open Scanner" and "View Event" buttons
+  - Instructions for projector/screen display
+- **Recent Activity Section**: Recent check-ins across faculty's events:
+  - Student name with avatar initials
+  - Event title
+  - Check-in time
+  - Status badge (PRESENT/CHECKED_IN)
+  - Sorted by most recent first
+- **Quick Actions**: Grid of action buttons (Create Event, Scan QR, View Clubs, Browse Events)
+- **Design**: Mobile-first responsive, consistent p-4/p-6 padding, scrollbar styling, framer-motion animations
+
+### 2. Updated UI Store (`/src/store/ui-store.ts`)
+- Added `'faculty-dashboard'` to ViewName type
+
+### 3. Updated Navbar (`/src/components/nexevent/Navbar.tsx`)
+- Changed Faculty role's Dashboard nav item from `'dashboard'` to `'faculty-dashboard'`
+- HOD and ADMIN roles still use `'dashboard'` (OrganizerDashboard)
+- Faculty nav items: Dashboard (faculty-dashboard), Create, Admin, Scan QR
+- HOD/ADMIN nav items: Dashboard (dashboard), Create, Admin, Scan QR
+
+### 4. Updated Page Router (`/src/app/page.tsx`)
+- Added `FacultyDashboard` import
+- Added `'faculty-dashboard'` case in renderView switch → `<FacultyDashboard />`
+
+### Lint: All changes pass `bun run lint` with zero errors ✅
+
+---
+
+## Session 10 Changes (Map Location Picker + Deployment Fix)
+
+### Task ID: 1 - Fix Deployment Build Error
+- **Issue**: `bun run build` was failing because `next.config.ts` didn't have `output: 'standalone'` configured, but the build script tried to copy files to `.next/standalone/`
+- **Fix**: Added `output: 'standalone'` to `next.config.ts`
+- **Also**: Added `allowedDevOrigins: ['21.0.14.84']` to suppress cross-origin warning
+- **File**: `/home/z/my-project/next.config.ts`
+- **Result**: Build completes successfully
+
+### Task ID: 2 - FacultyDashboard Component (Created by subagent)
+- **Created**: `/home/z/my-project/src/components/nexevent/FacultyDashboard.tsx`
+- **Features**: 
+  - Gradient header banner (violet/purple theme) with faculty name, department
+  - Stats cards: Clubs Managed, Events Created, Total Registrations, Check-ins Scanned
+  - My Clubs section with Faculty Advisor (Crown badge) vs Member role display
+  - My Events section with status badges and quick actions
+  - QR Code Management: Generate event-level QR codes for projector display
+  - Recent Activity: Recent check-ins across faculty events
+  - Quick Actions buttons
+- **Modified**: `ui-store.ts` (added 'faculty-dashboard' ViewName), `Navbar.tsx` (faculty uses 'faculty-dashboard'), `page.tsx` (added FacultyDashboard case)
+
+### Task ID: 3 - Map Location Picker for Geo-fencing
+- **Created**: `/home/z/my-project/src/components/nexevent/LocationPicker.tsx`
+  - Interactive Leaflet map for picking event venue location
+  - Click on map or drag marker to set lat/lng
+  - Geo-fence circle visualization (dashed, semi-transparent)
+  - "My Location" button for GPS detection
+  - "VVCE Campus" quick-set button (default center: 12.3376°N, 76.6549°E)
+  - Manual lat/lng/radius input fields alongside map
+  - Radius slider/input that updates the circle in real-time
+  - Dynamic Leaflet import (no SSR issues)
+- **Created**: `/home/z/my-project/src/components/nexevent/EventLocationMap.tsx`
+  - Read-only map component for EventDetail
+  - Shows venue marker with popup and geo-fence circle
+  - Auto-fits bounds to show the full geo-fence radius
+- **Modified**: `CreateEventForm.tsx`
+  - Replaced manual lat/lng/radius inputs with LocationPicker component
+  - Added new "Geo-fence & Location" card section with map
+  - Added Navigation icon import
+- **Modified**: `EventDetail.tsx`
+  - Added EventLocationMap import and display in geo-fence info card
+  - Map appears when event has venueLat/venueLng/geoFenceRadius
+- **Installed**: `leaflet`, `react-leaflet`, `@types/leaflet`
+
+### Task ID: 4 - Student Self Check-in via QR
+- **Modified**: `Navbar.tsx` - Added "Check In" nav item for STUDENT/OTHER roles
+- **Already implemented**: Attendance API supports `NEXEVENT-CHECKIN-{eventId}` format for self-check-in
+- **Already implemented**: QRScanner supports student self-check-in mode with different UI
+
+### Task ID: 5 - Backend Faculty Club Restriction
+- **Already implemented**: Events POST API validates faculty can only create events for clubs they belong to (facultyAdvisorId or member)
+
+### Lint: All changes pass `bun run lint` with zero errors ✅
+### Build: `bun run build` completes successfully ✅
+
+---
+
+## Current State Assessment (Post-Session 10)
+- Deployment build fixed (standalone output mode)
+- Faculty has dedicated dashboard with club memberships
+- Map-based location picker for geo-fencing in event creation
+- Event detail shows venue map with geo-fence circle
+- Students can self-check-in via event QR codes
+- Full QR attendance flow: Register → Get QR → Scan for check-in → Check-out → Attendance %
+
+## Unresolved Issues / Next Steps
+1. Leaflet CSS loaded from CDN - should be bundled for offline support
+2. No dark mode for map tiles (uses standard OSM light tiles)
+3. Event edit form doesn't have map picker yet (only create form)
+4. FacultyDashboard could show attendance analytics per event
+5. Mobile responsiveness for map components could be improved

@@ -7,6 +7,7 @@ export type ViewName =
   | 'dashboard'
   | 'student-dashboard'
   | 'hod-dashboard'
+  | 'faculty-dashboard'
   | 'admin'
   | 'profile'
   | 'clubs'

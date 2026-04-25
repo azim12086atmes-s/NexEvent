@@ -12,7 +12,7 @@ import {
   Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame,
   Swords, Trophy, Layers, Target, Shield, UsersRound, Trash2,
   ClipboardCheck, BarChart3, Award, UserPlus, LogOut, Copy, Hash,
-  AlertTriangle, Radio, Navigation, Pause
+  AlertTriangle, Radio, Navigation, Pause, ScanLine
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { EventLocationMap } from './EventLocationMap';
 
 const categoryColors: Record<string, string> = {
   HACKATHON: 'from-violet-500 to-purple-600',
@@ -96,6 +97,8 @@ export function EventDetail() {
   const [liked, setLiked] = useState(false);
   const [canScore, setCanScore] = useState(false);
   const [canViewResults, setCanViewResults] = useState(false);
+  const [userAttendance, setUserAttendance] = useState<any>(null);
+  const [selfCheckInLoading, setSelfCheckInLoading] = useState(false);
 
   // Team registration state
   const [teams, setTeams] = useState<any[]>([]);
@@ -280,6 +283,17 @@ export function EventDetail() {
         if (user?.role === 'STUDENT' && data.event?.status === 'LIVE' && data.event?.venueLat && data.event?.geoFenceRadius && data.userRegistration) {
           fetchAttendance();
         }
+
+        // Fetch user's attendance status if registered (for all active events)
+        if (user && data.userRegistration && ['LIVE', 'APPROVED'].includes(data.event?.status)) {
+          try {
+            const attRes = await fetch(`/api/events/${selectedEventId}/attendance?userId=${user.id}`);
+            if (attRes.ok) {
+              const attData = await attRes.json();
+              setUserAttendance(attData.attendance);
+            }
+          } catch { /* ignore */ }
+        }
       }
     };
     loadDetail();
@@ -312,7 +326,48 @@ export function EventDetail() {
       toast.success('Registration cancelled');
       fetchEventById(selectedEventId!);
       setUserReg(null);
+      setUserAttendance(null);
     } catch { toast.error('Failed to cancel'); }
+  };
+
+  const handleSelfCheckIn = async () => {
+    if (!user || !selectedEventId) return;
+    setSelfCheckInLoading(true);
+    try {
+      const qrCodeValue = `NEXEVENT-CHECKIN-${selectedEventId}`;
+      let lat: number | undefined, lng: number | undefined;
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+        });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {}
+
+      const res = await fetch(`/api/events/${selectedEventId}/attendance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, qrCode: qrCodeValue, latitude: lat, longitude: lng }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message);
+        setUserAttendance(data.attendance);
+        // Refresh attendance data
+        try {
+          const attRes = await fetch(`/api/events/${selectedEventId}/attendance?userId=${user.id}`);
+          if (attRes.ok) {
+            const attData = await attRes.json();
+            setUserAttendance(attData.attendance);
+          }
+        } catch { /* ignore */ }
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error('Check-in failed');
+    }
+    setSelfCheckInLoading(false);
   };
 
   const handleApprove = async (action: 'approve' | 'reject') => {
@@ -1477,6 +1532,17 @@ export function EventDetail() {
                     <p className="text-muted-foreground">Must be within {event.geoFenceRadius}m of venue for check-in</p>
                   </div>
                 </div>
+                {/* Interactive map showing geo-fence */}
+                {event.venueLat && event.venueLng && (
+                  <div className="mt-3 mb-2">
+                    <EventLocationMap
+                      latitude={event.venueLat}
+                      longitude={event.venueLng}
+                      radius={event.geoFenceRadius}
+                      venueName={event.venue}
+                    />
+                  </div>
+                )}
                 <div className="text-[10px] text-muted-foreground space-y-0.5 mt-2 pt-2 border-t border-border/30">
                   <p>• Attendance tracked via periodic location pings</p>
                   <p>• Attendance % = time spent within fence ÷ event duration</p>
