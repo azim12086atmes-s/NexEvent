@@ -1,14 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import { useClubStore, Club } from '@/store/club-store';
-import { Users, UserPlus, UserMinus, Loader2, Crown, Sparkles, Calendar, ExternalLink } from 'lucide-react';
+import { Users, UserPlus, UserMinus, Loader2, Crown, Sparkles, Calendar, ExternalLink, Search, Building2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 
 const categoryColors: Record<string, string> = {
@@ -19,9 +27,19 @@ const categoryColors: Record<string, string> = {
   OTHER: 'from-gray-500 to-gray-600',
 };
 
+const categoryBgColors: Record<string, string> = {
+  TECHNICAL: 'bg-cyan-50 dark:bg-cyan-950/20',
+  CULTURAL: 'bg-rose-50 dark:bg-rose-950/20',
+  SPORTS: 'bg-green-50 dark:bg-green-950/20',
+  SOCIAL: 'bg-fuchsia-50 dark:bg-fuchsia-950/20',
+  OTHER: 'bg-gray-50 dark:bg-gray-950/20',
+};
+
 const categoryIcons: Record<string, string> = {
   TECHNICAL: '⚡', CULTURAL: '🎭', SPORTS: '🏆', SOCIAL: '🌱', OTHER: '📌',
 };
+
+const clubCategories = ['TECHNICAL', 'CULTURAL', 'SPORTS', 'SOCIAL', 'OTHER'] as const;
 
 export function ClubsView() {
   const { user, isAuthenticated } = useAuthStore();
@@ -30,7 +48,61 @@ export function ClubsView() {
   const [expandedClub, setExpandedClub] = useState<string | null>(null);
   const [clubDetails, setClubDetails] = useState<Record<string, any>>({});
 
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<any[]>([]);
+
   useEffect(() => { fetchClubs(); }, [fetchClubs]);
+
+  // Load departments for filter
+  useEffect(() => {
+    const loadDepts = async () => {
+      try {
+        const res = await fetch('/api/admin/departments');
+        if (res.ok) {
+          const d = await res.json();
+          setDepartments(d.departments || []);
+        }
+      } catch { /* ignore */ }
+    };
+    loadDepts();
+  }, []);
+
+  // Filtered clubs
+  const filteredClubs = useMemo(() => {
+    let result = clubs;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(c =>
+        c.name.toLowerCase().includes(query) ||
+        c.description?.toLowerCase().includes(query)
+      );
+    }
+
+    // Category filter
+    if (activeCategory) {
+      result = result.filter(c => c.category === activeCategory);
+    }
+
+    // Department filter
+    if (selectedDepartment) {
+      result = result.filter(c => (c as any).departmentId === selectedDepartment);
+    }
+
+    return result;
+  }, [clubs, searchQuery, activeCategory, selectedDepartment]);
+
+  const hasActiveFilters = !!(searchQuery.trim() || activeCategory || selectedDepartment);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setActiveCategory(null);
+    setSelectedDepartment(null);
+  };
 
   const loadClubDetail = async (id: string) => {
     if (clubDetails[id]) return;
@@ -100,114 +172,227 @@ export function ClubsView() {
         </div>
       </motion.div>
 
-      {/* Clubs Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {clubs.map((club, i) => (
-          <motion.div
-            key={club.id}
-            initial={{ opacity: 0, y: 25 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06, type: 'spring', stiffness: 100 }}
-            whileHover={{ y: -4 }}
+      {/* Search Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="mb-4"
+      >
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search clubs by name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9 h-9 text-sm"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Category Pills */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex flex-wrap gap-2 mb-4"
+      >
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setActiveCategory(null)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
+            !activeCategory
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+          }`}
+        >
+          All
+        </motion.button>
+        {clubCategories.map(c => (
+          <motion.button
+            key={c}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setActiveCategory(activeCategory === c ? null : c)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-1 ${
+              activeCategory === c
+                ? `bg-gradient-to-r ${categoryColors[c]} text-white shadow-md`
+                : `${categoryBgColors[c] || 'bg-muted/50'} text-muted-foreground hover:text-foreground`
+            }`}
           >
-            <Card className="group hover:shadow-xl hover:shadow-primary/5 transition-all duration-500 overflow-hidden border-border/50 hover:border-primary/30 cursor-pointer"
-              onClick={() => navigate('club-detail', club.id)}>
-              {/* Gradient top bar */}
-              <div className={`h-2 bg-gradient-to-r ${categoryColors[club.category] || categoryColors.OTHER}`} />
-
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{categoryIcons[club.category] || '📌'}</span>
-                    <h3 className="font-semibold text-base group-hover:text-primary transition-colors">{club.name}</h3>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] shrink-0">{club.category}</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground line-clamp-2 mb-4 leading-relaxed">{club.description}</p>
-
-                <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3 h-3 text-primary/60" />
-                    {club._count?.members || 0} members
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-primary/60" />
-                    {club._count?.events || 0} events
-                  </span>
-                </div>
-
-                {club.facultyAdvisor && (
-                  <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
-                    <Crown className="w-3 h-3 text-amber-500" />
-                    <span>Advisor: <span className="font-medium text-foreground">{club.facultyAdvisor.name}</span></span>
-                  </div>
-                )}
-
-                {isAuthenticated && (
-                  <div className="flex gap-2 pt-3 border-t border-border/30">
-                    {isMember(club) ? (
-                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive text-xs flex-1"
-                        onClick={(e) => { e.stopPropagation(); handleLeave(club.id); }}>
-                        <UserMinus className="w-3 h-3 mr-1" /> Leave
-                      </Button>
-                    ) : (
-                      <Button size="sm" className="text-xs bg-primary hover:bg-primary/90 flex-1 shadow-md shadow-primary/10"
-                        onClick={(e) => { e.stopPropagation(); handleJoin(club.id); }}>
-                        <UserPlus className="w-3 h-3 mr-1" /> Join Club
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" className="text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const isExpanded = expandedClub === club.id;
-                        setExpandedClub(isExpanded ? null : club.id);
-                        if (!isExpanded) loadClubDetail(club.id);
-                      }}>
-                      {expandedClub === club.id ? 'Less' : 'Members'}
-                    </Button>
-                  </div>
-                )}
-
-                <AnimatePresence>
-                  {expandedClub === club.id && clubDetails[club.id] && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="mt-3 pt-3 border-t border-border/30 space-y-2 max-h-48 overflow-y-auto">
-                        {clubDetails[club.id].members?.map((m: any, mi: number) => (
-                          <motion.div
-                            key={m.id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: mi * 0.05 }}
-                            className="flex items-center justify-between text-xs"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary">
-                                {m.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                              </div>
-                              <span className="font-medium">{m.user.name}</span>
-                            </div>
-                            {m.role !== 'member' && (
-                              <Badge variant="secondary" className="text-[10px]">
-                                {m.role === 'president' && <Crown className="w-2.5 h-2.5 mr-0.5 text-amber-500" />}
-                                {m.role}
-                              </Badge>
-                            )}
-                          </motion.div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <span>{categoryIcons[c]}</span>
+            <span className="hidden sm:inline">{c}</span>
+          </motion.button>
         ))}
+      </motion.div>
+
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        {departments.length > 0 && (
+          <Select value={selectedDepartment || '_all'} onValueChange={(v) => setSelectedDepartment(v === '_all' ? null : v)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <Building2 className="w-3 h-3 mr-1" />
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All Depts</SelectItem>
+              {departments.map((d: any) => (
+                <SelectItem key={d.id} value={d.id}>{d.code} - {d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear Filters
+          </Button>
+        )}
+        <span className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
+          <Users className="w-3 h-3" /> {filteredClubs.length} club{filteredClubs.length !== 1 ? 's' : ''}
+        </span>
       </div>
+
+      {/* Clubs Grid */}
+      {filteredClubs.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center py-20"
+        >
+          <div className="relative w-24 h-24 mx-auto mb-6">
+            <motion.div
+              className="absolute inset-0 rounded-2xl border-2 border-dashed border-muted-foreground/20"
+              animate={{ rotate: [0, 90, 180, 270, 360] }}
+              transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+            />
+            <Users className="w-10 h-10 text-muted-foreground/30 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+          </div>
+          <p className="text-lg font-medium text-muted-foreground">No clubs found</p>
+          <p className="text-sm text-muted-foreground/60 mt-1">Try adjusting your filters</p>
+          {hasActiveFilters && (
+            <Button variant="link" size="sm" className="text-primary text-xs mt-2" onClick={clearFilters}>
+              Clear all filters
+            </Button>
+          )}
+        </motion.div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredClubs.map((club, i) => (
+            <motion.div
+              key={club.id}
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06, type: 'spring', stiffness: 100 }}
+              whileHover={{ y: -4 }}
+            >
+              <Card className="group hover:shadow-xl hover:shadow-primary/5 transition-all duration-500 overflow-hidden border-border/50 hover:border-primary/30 cursor-pointer"
+                onClick={() => navigate('club-detail', club.id)}>
+                {/* Gradient top bar */}
+                <div className={`h-2 bg-gradient-to-r ${categoryColors[club.category] || categoryColors.OTHER}`} />
+
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{categoryIcons[club.category] || '📌'}</span>
+                      <h3 className="font-semibold text-base group-hover:text-primary transition-colors">{club.name}</h3>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">{club.category}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mb-4 leading-relaxed">{club.description}</p>
+
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3 h-3 text-primary/60" />
+                      {club._count?.members || 0} members
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-primary/60" />
+                      {club._count?.events || 0} events
+                    </span>
+                  </div>
+
+                  {club.facultyAdvisor && (
+                    <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
+                      <Crown className="w-3 h-3 text-amber-500" />
+                      <span>Advisor: <span className="font-medium text-foreground">{club.facultyAdvisor.name}</span></span>
+                    </div>
+                  )}
+
+                  {isAuthenticated && (
+                    <div className="flex gap-2 pt-3 border-t border-border/30">
+                      {isMember(club) ? (
+                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive text-xs flex-1"
+                          onClick={(e) => { e.stopPropagation(); handleLeave(club.id); }}>
+                          <UserMinus className="w-3 h-3 mr-1" /> Leave
+                        </Button>
+                      ) : (
+                        <Button size="sm" className="text-xs bg-primary hover:bg-primary/90 flex-1 shadow-md shadow-primary/10"
+                          onClick={(e) => { e.stopPropagation(); handleJoin(club.id); }}>
+                          <UserPlus className="w-3 h-3 mr-1" /> Join Club
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const isExpanded = expandedClub === club.id;
+                          setExpandedClub(isExpanded ? null : club.id);
+                          if (!isExpanded) loadClubDetail(club.id);
+                        }}>
+                        {expandedClub === club.id ? 'Less' : 'Members'}
+                      </Button>
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {expandedClub === club.id && clubDetails[club.id] && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-3 pt-3 border-t border-border/30 space-y-2 max-h-48 overflow-y-auto">
+                          {clubDetails[club.id].members?.map((m: any, mi: number) => (
+                            <motion.div
+                              key={m.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: mi * 0.05 }}
+                              className="flex items-center justify-between text-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary">
+                                  {m.user.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                                </div>
+                                <span className="font-medium">{m.user.name}</span>
+                              </div>
+                              {m.role !== 'member' && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  {m.role === 'president' && <Crown className="w-2.5 h-2.5 mr-0.5 text-amber-500" />}
+                                  {m.role}
+                                </Badge>
+                              )}
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

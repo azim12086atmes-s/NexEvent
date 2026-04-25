@@ -126,7 +126,32 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
 
+    // If userId is provided, return only that user's attendance record
+    // This is used by students to check their own attendance
+    if (userId) {
+      const attendance = await db.attendance.findFirst({
+        where: { eventId: id, userId },
+        include: {
+          user: { select: { id: true, name: true, email: true, usn: true, department: true } },
+        },
+      });
+
+      if (!attendance) {
+        return NextResponse.json({ attendance: null });
+      }
+
+      return NextResponse.json({
+        attendance: {
+          ...attendance,
+          attendancePercentage: Math.round(attendance.attendancePercentage),
+        },
+      });
+    }
+
+    // Otherwise return all attendances (organizer view)
     const attendances = await db.attendance.findMany({
       where: { eventId: id },
       include: {

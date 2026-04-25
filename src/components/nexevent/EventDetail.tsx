@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
@@ -11,17 +11,28 @@ import {
   FileText, Download, ExternalLink, User as UserIcon,
   Zap, Heart, BookmarkPlus, ChevronRight, Timer, Flame,
   Swords, Trophy, Layers, Target, Shield, UsersRound, Trash2,
-  ClipboardCheck, BarChart3, Award
+  ClipboardCheck, BarChart3, Award, UserPlus, LogOut, Copy, Hash,
+  AlertTriangle, Radio, Navigation, Pause
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 const categoryColors: Record<string, string> = {
   HACKATHON: 'from-violet-500 to-purple-600',
@@ -85,11 +96,147 @@ export function EventDetail() {
   const [canScore, setCanScore] = useState(false);
   const [canViewResults, setCanViewResults] = useState(false);
 
+  // Team registration state
+  const [teams, setTeams] = useState<any[]>([]);
+  const [userTeam, setUserTeam] = useState<any>(null);
+  const [showCreateTeamDialog, setShowCreateTeamDialog] = useState(false);
+  const [showJoinTeamDialog, setShowJoinTeamDialog] = useState(false);
+  const [teamName, setTeamName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [teamLoading, setTeamLoading] = useState(false);
+
+  // Live attendance tracking state
+  const [isPinging, setIsPinging] = useState(false);
+  const [attendancePct, setAttendancePct] = useState(0);
+  const [withinFence, setWithinFence] = useState<boolean | null>(null);
+  const [geoError, setGeoError] = useState<string | null>(null);
+  const [pingCount, setPingCount] = useState(0);
+  const [lastPingTime, setLastPingTime] = useState<string | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup ping interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Fetch current attendance data when the event is LIVE and user is registered
+  const fetchAttendance = useCallback(async () => {
+    if (!selectedEventId || !user) return;
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}/attendance?userId=${user.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.attendance) {
+          setAttendancePct(data.attendance.attendancePercentage || 0);
+          setWithinFence(data.attendance.isWithinGeoFence);
+        }
+      }
+    } catch { /* ignore */ }
+  }, [selectedEventId, user]);
+
+  const sendPing = useCallback(async () => {
+    if (!selectedEventId || !user) return;
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 30000,
+        });
+      });
+
+      const res = await fetch(`/api/events/${selectedEventId}/location-pings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          eventId: selectedEventId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setWithinFence(data.isWithinFence);
+        setPingCount(prev => prev + 1);
+        setLastPingTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        setGeoError(null);
+        // Refresh attendance percentage after each ping
+        fetchAttendance();
+      } else {
+        toast.error(data.error || 'Ping failed');
+      }
+    } catch (err: any) {
+      if (err.code === 1) {
+        setGeoError('Location permission denied. Please enable location access.');
+        // Auto-stop pinging on permission denied
+        if (pingIntervalRef.current) {
+          clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = null;
+        }
+        setIsPinging(false);
+        fetchAttendance();
+        toast.info('Location access denied. Attendance tracking stopped.');
+      } else if (err.code === 2) {
+        setGeoError('Location unavailable. Please check your device settings.');
+      } else if (err.code === 3) {
+        setGeoError('Location request timed out. Retrying...');
+      }
+    }
+  }, [selectedEventId, user, fetchAttendance]);
+
+  const startPinging = useCallback(async () => {
+    if (!user || !selectedEventId) return;
+    setGeoError(null);
+
+    // Check if geolocation is available
+    if (!navigator.geolocation) {
+      setGeoError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    // Send the first ping immediately
+    await sendPing();
+
+    // Then set up interval for every 60 seconds
+    setIsPinging(true);
+    pingIntervalRef.current = setInterval(sendPing, 60000);
+    toast.success('Live attendance tracking started!');
+  }, [user, selectedEventId, sendPing]);
+
+  const stopPinging = useCallback(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    setIsPinging(false);
+    // Fetch final attendance
+    fetchAttendance();
+    toast.info('Attendance tracking stopped');
+  }, [fetchAttendance]);
+
   useEffect(() => {
     if (selectedEventId) {
       fetchEventById(selectedEventId);
     }
   }, [selectedEventId, fetchEventById]);
+
+  const fetchTeams = useCallback(async () => {
+    if (!selectedEventId) return;
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}/teams${user ? `?userId=${user.id}` : ''}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTeams(data.teams || []);
+        setUserTeam(data.userTeam || null);
+      }
+    } catch { /* ignore */ }
+  }, [selectedEventId, user]);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -123,11 +270,19 @@ export function EventDetail() {
             setCanScore(isPrivileged);
             setCanViewResults(isPrivileged);
           }
+
+          // Fetch teams data for competition events
+          fetchTeams();
+        }
+
+        // Fetch attendance for LIVE events with geo-fence (student view)
+        if (user?.role === 'STUDENT' && data.event?.status === 'LIVE' && data.event?.venueLat && data.event?.geoFenceRadius && data.userRegistration) {
+          fetchAttendance();
         }
       }
     };
     loadDetail();
-  }, [selectedEventId, user]);
+  }, [selectedEventId, user, fetchTeams, fetchAttendance]);
 
   const handleRegister = async () => {
     if (!user) return;
@@ -184,7 +339,6 @@ export function EventDetail() {
 
   const handleDeleteEvent = async () => {
     if (!user || !selectedEventId) return;
-    if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) return;
     try {
       const res = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -192,6 +346,97 @@ export function EventDetail() {
       toast.success('Event deleted successfully');
       navigate(previousView || 'feed');
     } catch { toast.error('Failed to delete event'); }
+  };
+
+  const handleCreateTeam = async () => {
+    if (!user || !selectedEventId) return;
+    if (!teamName.trim()) { toast.error('Please enter a team name'); return; }
+    setTeamLoading(true);
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}/teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, action: 'create', teamName: teamName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); setTeamLoading(false); return; }
+      toast.success('Team created! Share the code with teammates 🎉');
+      setShowCreateTeamDialog(false);
+      setTeamName('');
+      fetchTeams();
+      fetchEventById(selectedEventId);
+      const detailRes = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`);
+      if (detailRes.ok) { const d = await detailRes.json(); setUserReg(d.userRegistration); }
+    } catch { toast.error('Failed to create team'); }
+    setTeamLoading(false);
+  };
+
+  const handleJoinTeam = async () => {
+    if (!user || !selectedEventId) return;
+    if (!joinCode.trim()) { toast.error('Please enter a team code'); return; }
+    setTeamLoading(true);
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}/teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, action: 'join', teamCode: joinCode.trim().toUpperCase() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); setTeamLoading(false); return; }
+      toast.success('Joined team successfully! 🎉');
+      setShowJoinTeamDialog(false);
+      setJoinCode('');
+      fetchTeams();
+      fetchEventById(selectedEventId);
+      const detailRes = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`);
+      if (detailRes.ok) { const d = await detailRes.json(); setUserReg(d.userRegistration); }
+    } catch { toast.error('Failed to join team'); }
+    setTeamLoading(false);
+  };
+
+  const handleJoinTeamById = async (teamId: string) => {
+    if (!user || !selectedEventId) return;
+    setTeamLoading(true);
+    try {
+      // Find the team to get its code
+      const team = teams.find((t: any) => t.id === teamId);
+      if (!team) { toast.error('Team not found'); setTeamLoading(false); return; }
+      const res = await fetch(`/api/events/${selectedEventId}/teams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, action: 'join', teamCode: team.teamCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); setTeamLoading(false); return; }
+      toast.success('Joined team successfully! 🎉');
+      fetchTeams();
+      fetchEventById(selectedEventId);
+      const detailRes = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`);
+      if (detailRes.ok) { const d = await detailRes.json(); setUserReg(d.userRegistration); }
+    } catch { toast.error('Failed to join team'); }
+    setTeamLoading(false);
+  };
+
+  const handleLeaveTeam = async () => {
+    if (!user || !selectedEventId) return;
+    setTeamLoading(true);
+    try {
+      const res = await fetch(`/api/events/${selectedEventId}/teams?userId=${user.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error); setTeamLoading(false); return; }
+      toast.success(data.message || 'Left team successfully');
+      fetchTeams();
+      fetchEventById(selectedEventId);
+      setUserReg(null);
+      const detailRes = await fetch(`/api/events/${selectedEventId}?userId=${user.id}`);
+      if (detailRes.ok) { const d = await detailRes.json(); setUserReg(d.userRegistration); }
+    } catch { toast.error('Failed to leave team'); }
+    setTeamLoading(false);
+  };
+
+  const copyTeamCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    toast.success('Team code copied!');
   };
 
   const generatePDF = async () => {
@@ -478,6 +723,139 @@ export function EventDetail() {
             </motion.div>
           )}
 
+          {/* Live Attendance Tracking - Students only for LIVE events with geo-fence */}
+          {user?.role === 'STUDENT' && event.status === 'LIVE' && userReg && event.venueLat && event.venueLng && event.geoFenceRadius && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
+              <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50/50 to-teal-50/30 dark:from-emerald-950/20 dark:to-teal-950/10 overflow-hidden">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <div className="relative">
+                      <Radio className="w-4 h-4 text-emerald-600" />
+                      {isPinging && (
+                        <motion.span
+                          className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500"
+                          animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                      )}
+                    </div>
+                    Live Attendance Tracking
+                    {isPinging && (
+                      <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 animate-pulse">
+                        Active
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Attendance percentage display */}
+                  <div className="flex items-center gap-4">
+                    <div className="relative w-20 h-20 shrink-0">
+                      <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                        <circle cx="40" cy="40" r="35" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/20" />
+                        <motion.circle
+                          cx="40" cy="40" r="35" fill="none" strokeWidth="6" strokeLinecap="round"
+                          className={attendancePct >= 75 ? 'text-emerald-500' : attendancePct >= 50 ? 'text-amber-500' : 'text-rose-500'}
+                          stroke="currentColor"
+                          strokeDasharray={`${2 * Math.PI * 35}`}
+                          strokeDashoffset={2 * Math.PI * 35 * (1 - attendancePct / 100)}
+                          initial={{ strokeDashoffset: 2 * Math.PI * 35 }}
+                          animate={{ strokeDashoffset: 2 * Math.PI * 35 * (1 - attendancePct / 100) }}
+                          transition={{ duration: 0.8, ease: 'easeOut' }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-lg font-bold">{Math.round(attendancePct)}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Attendance</p>
+                        <p className="text-sm font-medium">
+                          {attendancePct >= 75 ? 'Great attendance!' : attendancePct >= 50 ? 'Decent attendance' : 'Low attendance - stay within venue'}
+                        </p>
+                      </div>
+                      {/* Geo-fence status */}
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2.5 h-2.5 rounded-full ${withinFence === true ? 'bg-emerald-500' : withinFence === false ? 'bg-rose-500' : 'bg-gray-300'}`} />
+                        <span className="text-xs font-medium">
+                          {withinFence === true ? 'Inside geo-fence' : withinFence === false ? 'Outside geo-fence' : 'Not checked yet'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ping stats */}
+                  {pingCount > 0 && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-2.5 rounded-lg bg-background/80 border border-border/50 text-center">
+                        <p className="text-lg font-bold text-emerald-600">{pingCount}</p>
+                        <p className="text-[10px] text-muted-foreground">Pings Sent</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-background/80 border border-border/50 text-center">
+                        <p className="text-sm font-medium">{lastPingTime || '--'}</p>
+                        <p className="text-[10px] text-muted-foreground">Last Ping</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pinging indicator */}
+                  {isPinging && (
+                    <motion.div
+                      className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-100/50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800"
+                      animate={{ opacity: [0.7, 1, 0.7] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    >
+                      <Navigation className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                      <span className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+                        Tracking location — next ping in ~60s
+                      </span>
+                    </motion.div>
+                  )}
+
+                  {/* Error message */}
+                  {geoError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-800"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                      <span className="text-xs text-rose-700 dark:text-rose-300">{geoError}</span>
+                    </motion.div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-3">
+                    {!isPinging ? (
+                      <Button
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={startPinging}
+                      >
+                        <Navigation className="w-4 h-4 mr-2" /> Start Check-in Pings
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300"
+                        onClick={stopPinging}
+                      >
+                        <Pause className="w-4 h-4 mr-2" /> Stop Pings
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Info text */}
+                  <div className="text-[10px] text-muted-foreground space-y-0.5">
+                    <p>• Location pings are sent every 60 seconds while active</p>
+                    <p>• Attendance % = pings within venue ÷ total pings</p>
+                    <p>• Geo-fence radius: {event.geoFenceRadius}m from venue center</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
           {/* Competition Config */}
           {event.eventType === 'COMPETITION' && event.competitionConfig && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
@@ -549,25 +927,210 @@ export function EventDetail() {
                     </div>
                   )}
 
-                  {/* Teams */}
-                  {event.teams && event.teams.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium flex items-center gap-1"><UsersRound className="w-3.5 h-3.5 text-primary" /> Registered Teams ({event.teams.length})</p>
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        {event.teams.map((team: any) => (
-                          <div key={team.id} className="p-2.5 rounded-lg border border-border/50 bg-background flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium">{team.name}</p>
-                              <p className="text-[10px] text-muted-foreground">
-                                Leader: {team.leader?.name || 'Unknown'} • {team.members?.length || 0} members
-                              </p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {/* Team Registration Section - Only for competition events */}
+          {event.eventType === 'COMPETITION' && (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.29 }}>
+              <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/10">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <UsersRound className="w-4 h-4 text-emerald-600" /> Team Registration
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* User's current team */}
+                  {userTeam ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="p-4 rounded-xl border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-emerald-600" />
+                          <h4 className="font-semibold text-emerald-800 dark:text-emerald-200">{userTeam.name}</h4>
+                        </div>
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          Your Team
+                        </Badge>
+                      </div>
+
+                      {/* Team code */}
+                      <div className="flex items-center gap-2 mb-3 p-2.5 rounded-lg bg-background border border-border/50">
+                        <Hash className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-mono font-bold tracking-wider">{userTeam.teamCode}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-auto h-7 px-2"
+                          onClick={() => copyTeamCode(userTeam.teamCode)}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mb-3">Share this code with teammates so they can join!</p>
+
+                      {/* Members list */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Members ({userTeam.members?.length || 0}/{event.competitionConfig?.teamMaxSize || 5})
+                        </p>
+                        {userTeam.members?.map((m: any) => (
+                          <div key={m.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-background/80">
+                            <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                              {(m.user?.name || '?').split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                             </div>
-                            <Badge variant={team.status === 'WINNER' ? 'default' : 'outline'} className="text-[10px]">
-                              {team.status}
-                            </Badge>
+                            <span className="text-sm font-medium flex-1">{m.user?.name || 'Unknown'}</span>
+                            {m.userId === userTeam.leaderId && (
+                              <Badge className="text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                Leader
+                              </Badge>
+                            )}
+                            {m.userId === user?.id && (
+                              <Badge variant="outline" className="text-[9px]">You</Badge>
+                            )}
                           </div>
                         ))}
                       </div>
+
+                      {/* Leave team button */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-3 text-destructive hover:text-destructive hover:bg-destructive/5"
+                            disabled={teamLoading}
+                          >
+                            {teamLoading ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <LogOut className="w-3 h-3 mr-1" />}
+                            {userTeam.leaderId === user?.id ? 'Disband Team' : 'Leave Team'}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                              <AlertTriangle className="w-5 h-5 text-destructive" />
+                              {userTeam.leaderId === user?.id ? 'Disband Team' : 'Leave Team'}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {userTeam.leaderId === user?.id
+                                ? 'Are you sure you want to disband this team? All members will be removed and this action cannot be undone.'
+                                : 'Are you sure you want to leave this team?'}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={handleLeaveTeam}
+                            >
+                              {userTeam.leaderId === user?.id ? 'Disband' : 'Leave'}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </motion.div>
+                  ) : (
+                    /* No team yet - show action buttons */
+                    <div className="space-y-3">
+                      {isAuthenticated && ['APPROVED', 'LIVE'].includes(event.status) ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Button
+                              className="h-auto py-3 flex flex-col items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => setShowCreateTeamDialog(true)}
+                            >
+                              <Trophy className="w-5 h-5" />
+                              <span className="text-xs font-semibold">Form a Team</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="h-auto py-3 flex flex-col items-center gap-1.5 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                              onClick={() => setShowJoinTeamDialog(true)}
+                            >
+                              <UserPlus className="w-5 h-5" />
+                              <span className="text-xs font-semibold">Join a Team</span>
+                            </Button>
+                          </div>
+                          {event.competitionConfig?.allowIndividual && (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-px bg-border" />
+                              <span className="text-[10px] text-muted-foreground">or register individually</span>
+                              <div className="flex-1 h-px bg-border" />
+                            </div>
+                          )}
+                        </>
+                      ) : !isAuthenticated ? (
+                        <div className="text-center py-2">
+                          <p className="text-sm text-muted-foreground mb-2">Sign in to join or form a team</p>
+                          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => useUIStore.getState().showLogin()}>
+                            Sign In
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-center text-muted-foreground py-2">
+                          Team registration not available
+                        </p>
+                      )}
+
+                      {/* Available teams list */}
+                      {teams.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <UsersRound className="w-3 h-3" /> Registered Teams ({teams.length}{event.competitionConfig?.maxTeams ? ` / ${event.competitionConfig.maxTeams}` : ''})
+                          </p>
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                            {teams.map((team: any, i: number) => {
+                              const maxTeamSize = event.competitionConfig?.teamMaxSize || 5;
+                              const memberCount = team.members?.length || 0;
+                              const isFull = memberCount >= maxTeamSize;
+                              const isUserTeam = userTeam?.id === team.id;
+                              return (
+                                <motion.div
+                                  key={team.id}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: i * 0.05 }}
+                                  className={`p-2.5 rounded-lg border flex items-center justify-between ${
+                                    isUserTeam
+                                      ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-950/20'
+                                      : 'border-border/50 bg-background'
+                                  }`}
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-sm font-medium truncate">{team.name}</p>
+                                      <Badge variant={team.status === 'WINNER' ? 'default' : 'outline'} className="text-[9px] shrink-0">
+                                        {team.status}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                      Leader: {team.leader?.name || 'Unknown'} • {memberCount}/{maxTeamSize} members
+                                    </p>
+                                  </div>
+                                  {!isUserTeam && isAuthenticated && !userTeam && ['APPROVED', 'LIVE'].includes(event.status) && (
+                                    <Button
+                                      size="sm"
+                                      variant={isFull ? 'ghost' : 'outline'}
+                                      className={`ml-2 h-7 text-[10px] shrink-0 ${
+                                        !isFull ? 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30' : 'text-muted-foreground'
+                                      }`}
+                                      disabled={isFull || teamLoading}
+                                      onClick={() => handleJoinTeamById(team.id)}
+                                    >
+                                      {teamLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : isFull ? 'Full' : 'Join'}
+                                    </Button>
+                                  )}
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -851,9 +1414,33 @@ export function EventDetail() {
                     )}
                   </Button>
                   {event.status !== 'COMPLETED' && (
-                    <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive hover:bg-destructive/5" onClick={handleDeleteEvent}>
-                      <Trash2 className="w-3 h-3 mr-1" /> Delete Event
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive hover:bg-destructive/5">
+                          <Trash2 className="w-3 h-3 mr-1" /> Delete Event
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="w-5 h-5 text-destructive" />
+                            Delete Event
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this event? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={handleDeleteEvent}
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   )}
                 </>
               )}
@@ -881,6 +1468,108 @@ export function EventDetail() {
           )}
         </div>
       </div>
+
+      {/* Create Team Dialog */}
+      <Dialog open={showCreateTeamDialog} onOpenChange={setShowCreateTeamDialog}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-emerald-600" /> Form a Team
+            </DialogTitle>
+            <DialogDescription>
+              Create a new team for {event?.title}. A unique team code will be generated for your teammates to join.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Team Name</label>
+              <Input
+                placeholder="e.g., Code Warriors, Team Phoenix"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
+                maxLength={50}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Team size: {event?.competitionConfig?.teamMinSize || 1}-{event?.competitionConfig?.teamMaxSize || 5} members
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+              <p className="text-xs font-medium text-muted-foreground mb-1">What happens next?</p>
+              <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                <li>• A unique 6-character team code will be auto-generated</li>
+                <li>• You will be the team leader</li>
+                <li>• Share the code with teammates so they can join</li>
+                <li>• You will be automatically registered for the event</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowCreateTeamDialog(false); setTeamName(''); }}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleCreateTeam}
+              disabled={teamLoading || !teamName.trim()}
+            >
+              {teamLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trophy className="w-4 h-4 mr-1" />}
+              Create Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Join Team Dialog */}
+      <Dialog open={showJoinTeamDialog} onOpenChange={setShowJoinTeamDialog}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-emerald-600" /> Join a Team
+            </DialogTitle>
+            <DialogDescription>
+              Enter the team code shared by the team leader to join their team.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Team Code</label>
+              <Input
+                placeholder="e.g., ABC123"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoinTeam()}
+                maxLength={6}
+                className="font-mono text-lg tracking-widest text-center uppercase"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Ask the team leader for the 6-character code
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Good to know</p>
+              <ul className="text-[10px] text-muted-foreground space-y-0.5">
+                <li>• You will be automatically registered for the event</li>
+                <li>• Team code is case-insensitive</li>
+                <li>• You can only be on one team per competition</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowJoinTeamDialog(false); setJoinCode(''); }}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleJoinTeam}
+              disabled={teamLoading || !joinCode.trim()}
+            >
+              {teamLoading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <UserPlus className="w-4 h-4 mr-1" />}
+              Join Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

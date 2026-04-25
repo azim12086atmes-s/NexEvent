@@ -478,7 +478,7 @@ export async function PUT(
       await db.certificate.update({
         where: { id: certificateId },
         data: {
-          certificateUrl: `data:application/pdf;base64,${base64Pdf.substring(0, 50)}...`,
+          certificateUrl: `data:application/pdf;base64,${base64Pdf}`,
           issuedAt: certificate.issuedAt || new Date(),
         },
       });
@@ -510,7 +510,7 @@ export async function PUT(
         await db.certificate.update({
           where: { id: cert.id },
           data: {
-            certificateUrl: `data:application/pdf;base64,${base64Pdf.substring(0, 50)}...`,
+            certificateUrl: `data:application/pdf;base64,${base64Pdf}`,
             issuedAt: cert.issuedAt || new Date(),
           },
         });

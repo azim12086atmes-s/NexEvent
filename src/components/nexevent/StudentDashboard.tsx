@@ -181,6 +181,7 @@ export function StudentDashboard() {
   // ============================================================
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       if (!user) return;
       setIsLoading(true);
@@ -192,20 +193,22 @@ export function StudentDashboard() {
           fetch('/api/clubs'),
         ]);
 
+        if (cancelled) return;
+
         let fetchedRegistrations: Registration[] = [];
 
         if (aicteRes.ok) {
           const d = await aicteRes.json();
-          setAicteData(d);
+          if (!cancelled) setAicteData(d);
         }
         if (regRes.ok) {
           const d = await regRes.json();
           fetchedRegistrations = d.registrations || [];
-          setRegistrations(fetchedRegistrations);
+          if (!cancelled) setRegistrations(fetchedRegistrations);
         }
         if (profileRes.ok) {
           const d = await profileRes.json();
-          setProfileData(d.user);
+          if (!cancelled) setProfileData(d.user);
         }
         if (clubsRes.ok) {
           const d = await clubsRes.json();
@@ -231,7 +234,7 @@ export function StudentDashboard() {
                 },
               } as ClubMembership;
             });
-          setClubs(myClubs);
+          if (!cancelled) setClubs(myClubs);
         }
 
         // Fetch certificates for each registered event
@@ -253,14 +256,15 @@ export function StudentDashboard() {
             return [];
           });
           const certResults = await Promise.all(certPromises);
-          setCertificates(certResults.flat());
+          if (!cancelled) setCertificates(certResults.flat());
         }
       } catch (err) {
         console.error('Dashboard load error:', err);
       }
-      setIsLoading(false);
+      if (!cancelled) setIsLoading(false);
     };
     load();
+    return () => { cancelled = true; };
   }, [user]);
 
   // ============================================================

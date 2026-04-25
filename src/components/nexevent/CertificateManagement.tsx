@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import {
   Award, FileText, Download, PlusCircle, Trash2, Loader2,
-  Shield, CheckCircle2, Users, Sparkles
+  Shield, CheckCircle2, Users, Sparkles, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // ============================================================
 // Types
@@ -358,7 +363,6 @@ export function CertificateManagement() {
 
   const handleDelete = async (certificateId: string) => {
     if (!selectedEventId || !user) return;
-    if (!confirm('Are you sure you want to delete this certificate?')) return;
     setDeleting(certificateId);
     try {
       const res = await fetch(
@@ -732,19 +736,42 @@ export function CertificateManagement() {
                               )}
                               Generate All PDFs
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5"
-                              onClick={() => handleDelete(template.id)}
-                              disabled={deleting === template.id}
-                            >
-                              {deleting === template.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3 h-3" />
-                              )}
-                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-xs text-destructive hover:text-destructive hover:bg-destructive/5"
+                                  disabled={deleting === template.id}
+                                >
+                                  {deleting === template.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-3 h-3" />
+                                  )}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle className="flex items-center gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-destructive" />
+                                    Delete Certificate
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this certificate? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => handleDelete(template.id)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </div>
                         </div>
                       </CardContent>

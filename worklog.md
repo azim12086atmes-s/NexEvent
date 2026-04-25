@@ -862,3 +862,100 @@ The application now has a complete competition scoring system:
 - `html5-qrcode@2.3.8` — Camera-based QR code scanning
 
 ### Lint Status: ✅ Zero errors
+
+---
+
+## Session 11 Changes (Demo Accounts, Bug Fixes, Feature Completion)
+
+### Task ID: 1-12 - Full Feature Completion & Demo Account Standardization
+
+### 1. Demo Account Standardization
+- **ALL user passwords changed to `demo123`** (was inconsistent: admin123, faculty123, student123, demo123)
+- **Added OTHER role demo account**: `guest@vvce.ac.in` / `demo123` (Guest User, CS department)
+- **Updated AuthModal**: 5 demo account buttons with color-coded backgrounds, emoji labels, and "(password: demo123)" hint
+  - 👑 Admin (rose), 🎓 HOD (amber), 🏫 Faculty (violet), 📚 Student (emerald), 👤 Guest (slate)
+
+### 2. Seed Data - AictePoint Model + Demo Data
+- **Added `AictePoint` model to Prisma schema**: userId, eventId, points, reason, awardedById, awardedAt
+- **Added reverse relations**: User.aictePointsReceived, User.aictePointsAwarded, Event.aictePointEntries
+- **Seeded 32 Score records**: HackVerse 2 rounds × 2 teams × 4 criteria × 2 judges (70-95% range)
+- **Seeded 3 Certificate templates**: Participation (EVENT_WIDE), Winner (EVENT_WIDE), Runner-up (ROUND_SPECIFIC)
+- **Seeded 24 AictePoint entries**: 8 students × 3 events (5-20 points each)
+- **Seeded 2 notifications for OTHER user**: Welcome + role assignment pending
+- **Opened scoring for both competition rounds** (scoringOpen = true)
+
+### 3. Bug Fix: Certificate URL Storage
+- **Issue**: `certificateUrl` stored truncated base64 (`substring(0, 50)...`) — useless for downloads
+- **Fix**: Changed to store FULL base64 string `data:application/pdf;base64,${base64Pdf}`
+- **File**: `/src/app/api/events/[id]/certificates/route.ts`
+
+### 4. Bug Fix: Replaced `confirm()` with shadcn AlertDialog
+- **CertificateManagement.tsx**: Delete certificate button now shows AlertDialog with "Delete Certificate" title and warning
+- **EventDetail.tsx**: Delete event button → AlertDialog; Leave/Disband team button → AlertDialog with contextual text
+- **Files**: CertificateManagement.tsx, EventDetail.tsx
+
+### 5. Feature: Club Search/Filter (ClubsView.tsx)
+- **Search bar**: Filter clubs by name and description with clear button
+- **Category filter pills**: All, TECHNICAL, CULTURAL, SPORTS, SOCIAL, OTHER with gradient active states
+- **Department filter dropdown**: Select from available departments (loads from API)
+- **"Clear Filters" button**: Appears when any filter is active
+- **Result count**: Shows "X clubs" on right side of filter bar
+- **Empty state**: Animated "No clubs found" with "Clear all filters" link
+
+### 6. Bug Fix: StudentDashboard Cancelled Flag
+- **Issue**: Data-loading useEffect had no cancellation mechanism — stale state updates on unmount
+- **Fix**: Added `cancelled` flag with `if (!cancelled)` guards on all setState calls and cleanup function
+
+### 7. Feature: Team Registration UI (EventDetail.tsx + Teams API)
+- **New API**: `/api/events/[id]/teams/route.ts`
+  - GET: List teams with leader/member info, identify user's team
+  - POST: Create team (auto-generates 6-char code, sets leader, creates registration) or Join team (via code, validates size limits)
+  - DELETE: Leave/disband team (leader leaving disbands entire team)
+- **EventDetail Team Registration Card** (emerald-themed, competition events only):
+  - If on team: team name, copyable team code, member list with Leader/You badges, Leave/Disband button
+  - If no team: "Form a Team" and "Join a Team" buttons, individual registration option, scrollable team list with Join buttons
+  - Form a Team dialog with name input and team size info
+  - Join a Team dialog with team code input (uppercase, monospace)
+
+### 8. Feature: Student-Side Live Attendance Tracking (EventDetail.tsx)
+- **Modified attendance API**: Added `?userId=xxx` query param for student's own attendance record
+- **Live Attendance Tracking Card** (only for STUDENT + LIVE event + registered + geo-fence configured):
+  - Pulsing green dot when actively pinging
+  - Circular SVG progress ring showing attendance % with color coding (green ≥75%, amber ≥50%, red <50%)
+  - Geo-fence status indicator (inside/outside/not checked)
+  - Ping stats: count + last ping timestamp
+  - Start/Stop buttons for periodic check-in pings (60-second interval)
+  - Geolocation permission handling with error display
+  - Auto-fetch attendance on component mount
+
+### 9. Feature: Google OAuth (Phase 9)
+- **New API**: `/api/auth/google/route.ts`
+  - POST: Accepts { googleToken, email, name, googleId }
+  - Validates @vvce.ac.in email domain
+  - Existing users: links googleId/googleEmail, logs in
+  - New users: creates account with OTHER role, PENDING approval
+- **Auth Store**: Added `googleLogin()` method with GoogleLoginData/GoogleLoginResponse interfaces
+- **AuthModal**: Added "Sign in with Google" button with Google SVG icon
+  - Simulated Google Sign-In Dialog with 4 animated steps:
+    1. Email step: "Choose an account" with quick-select demo accounts + custom input
+    2. Loading step: Spinner animation
+    3. Success step: Green checkmark with spring animation
+    4. Pending approval step: Amber alert for new users
+
+### Lint Status: ✅ Zero errors
+### All 9 Phases: ✅ COMPLETE (Phase 1-9)
+
+---
+
+## Current Demo Accounts (All password: demo123)
+| Email | Role | Name |
+|-------|------|------|
+| admin@vvce.ac.in | ADMIN | System Admin |
+| hod.cs@vvce.ac.in | HOD | Dr. Kavitha Raj |
+| hod.ec@vvce.ac.in | HOD | Dr. Suresh Bhat |
+| priya.sharma@vvce.ac.in | FACULTY | Priya Sharma |
+| anil.desai@vvce.ac.in | FACULTY | Anil Desai |
+| aditi.n@vvce.ac.in | STUDENT | Aditi N |
+| guest@vvce.ac.in | OTHER | Guest User |
+| + 16 more student accounts | STUDENT | Various |
+

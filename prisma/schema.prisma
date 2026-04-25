@@ -150,6 +150,9 @@ model User {
   scoresGiven          Score[]
   // Certificates
   certificates         Certificate[]
+  // AICTE Points
+  aictePointsReceived  AictePoint[]  @relation("AictePointsReceived")
+  aictePointsAwarded   AictePoint[]  @relation("AictePointsAwarder")
   // Location tracking
   locationPings        LocationPing[]
   // Club creation requests
@@ -344,6 +347,7 @@ model Event {
   teams             Team[]
   certificates      Certificate[]
   locationPings     LocationPing[]
+  aictePointEntries AictePoint[]
 }
 
 model EventRegistration {
@@ -571,6 +575,20 @@ model TeamMember {
 // - Participation certificates for eliminated teams (default option)
 // - Organizer chooses how many certificate types and for which rounds
 // ============================================================
+
+model AictePoint {
+  id          String   @id @default(cuid())
+  userId      String
+  eventId     String
+  points      Float
+  reason      String
+  awardedById String
+  awardedAt   DateTime @default(now())
+
+  user        User     @relation("AictePointsReceived", fields: [userId], references: [id])
+  event       Event    @relation(fields: [eventId], references: [id])
+  awardedBy   User     @relation("AictePointsAwarder", fields: [awardedById], references: [id])
+}
 
 model Certificate {
   id              String   @id @default(cuid())

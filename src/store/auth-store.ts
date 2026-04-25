@@ -29,6 +29,19 @@ interface RegisterData {
   phone?: string;
 }
 
+interface GoogleLoginData {
+  googleToken: string;
+  email: string;
+  name: string;
+  googleId: string;
+}
+
+interface GoogleLoginResponse {
+  user: AuthUser;
+  message: string;
+  isNewUser?: boolean;
+}
+
 interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -37,6 +50,7 @@ interface AuthState {
 
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
+  googleLogin: (data: GoogleLoginData) => Promise<{ isNewUser?: boolean }>;
   logout: () => void;
   checkAuth: () => void;
   updateProfile: (data: Partial<AuthUser>) => Promise<void>;
@@ -104,6 +118,46 @@ export const useAuthStore = create<AuthState>()(
           set({
             isLoading: false,
             error: err instanceof Error ? err.message : 'Registration failed',
+          });
+          throw err;
+        }
+      },
+
+      googleLogin: async (data: GoogleLoginData) => {
+        set({ isLoading: true, error: null });
+        try {
+          const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+
+          const responseData: GoogleLoginResponse = await res.json();
+          if (!res.ok) {
+            throw new Error((responseData as any).error || 'Google sign-in failed');
+          }
+
+          // If new user with PENDING approval, don't auto-login
+          if (responseData.isNewUser) {
+            set({
+              isLoading: false,
+              error: null,
+            });
+            return { isNewUser: true };
+          }
+
+          // Existing approved user — log them in
+          set({
+            user: responseData.user,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+          return { isNewUser: false };
+        } catch (err) {
+          set({
+            isLoading: false,
+            error: err instanceof Error ? err.message : 'Google sign-in failed',
           });
           throw err;
         }
