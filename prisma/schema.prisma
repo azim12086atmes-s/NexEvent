@@ -7,10 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================
+// ROLES: ADMIN, HOD, FACULTY, STUDENT
+// ORGANIZER has been REMOVED - faculty in charge of a club organizes events
+// Students with club permissions can also organize
+// ============================================================
+
 enum UserRole {
   STUDENT
-  ORGANIZER
   FACULTY
+  HOD
   ADMIN
 }
 
@@ -44,24 +50,82 @@ enum RegistrationStatus {
 
 enum AttendanceStatus {
   PRESENT
-  ABENT
+  ABSENT
   LATE
 }
 
-model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String
-  avatar        String?
-  role          UserRole @default(STUDENT)
-  department    String?
-  usn           String?  // University Seat Number for students
-  phone         String?
-  passwordHash  String   @default("")
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+enum ClubApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
+enum UserApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CertificateType {
+  PARTICIPATION
+  WINNER
+  RUNNER_UP
+  BEST_PERFORMER
+  SPECIAL_MENTION
+  CUSTOM
+}
+
+enum CertificateScope {
+  EVENT_WIDE     // Round-free, available to all who qualify
+  ROUND_SPECIFIC  // Only for participants in this round
+}
+
+// ============================================================
+// DEPARTMENT MODEL
+// Every department has an HOD (User with HOD role)
+// ============================================================
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique   // e.g., "Computer Science", "Electronics"
+  code        String   @unique   // e.g., "CS", "EC"
+  description String?
+  hodId       String?  @unique   // One HOD per department
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hod         User?    @relation("DepartmentHOD", fields: [hodId], references: [id])
+  clubs       Club[]
+  events      Event[]
+  users       User[]   @relation("DepartmentMembers")
+}
+
+// ============================================================
+// USER MODEL
+// - Admin approves HOD/Faculty role assignments
+// - No account creation without authorization (approvalStatus)
+// - HOD role is assigned to a User who then becomes department HOD
+// ============================================================
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  avatar          String?
+  role            UserRole @default(STUDENT)
+  departmentId    String?                          // Which department they belong to
+  usn             String?   // University Seat Number for students
+  phone           String?
+  passwordHash    String   @default("")
+  isActive        Boolean  @default(true)
+  approvalStatus  UserApprovalStatus @default(APPROVED) // Admin must approve HOD/Faculty roles
+  googleId        String?   // Google OAuth ID
+  googleEmail     String?   // Google email (may differ from institutional)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  department      Department? @relation("DepartmentMembers", fields: [departmentId], references: [id])
   clubMemberships       ClubMember[]
   organizedEvents       Event[]       @relation("EventOrganizer")
   approvedEvents        Event[]       @relation("EventApprover")
@@ -77,7 +141,26 @@ model User {
   createdEventRoles     EventRole[]  @relation("EventRoleCreator")
   clubRoleAssignmentsMade ClubRoleAssignment[] @relation("ClubRoleAssigner")
   eventRoleAssignmentsMade EventRoleAssignment[] @relation("EventRoleAssigner")
+  // HOD of department
+  hodDepartment        Department?  @relation("DepartmentHOD")
+  // Scoring
+  scoresGiven          Score[]
+  // Certificates
+  certificates         Certificate[]
+  // Location tracking
+  locationPings        LocationPing[]
+  // Club creation requests
+  clubRequests         ClubCreationRequest[]
+  // Approved clubs
+  approvedClubs        Club[]       @relation("ClubApprover")
 }
+
+// ============================================================
+// CLUB MODEL
+// - Faculty requests club creation under a department → HOD approves
+// - Two enrollment modes: auto-join or approval-required
+// - Faculty in-charge (advisor) organizes events for the club
+// ============================================================
 
 model Club {
   id              String   @id @default(cuid())
@@ -90,9 +173,16 @@ model Club {
   isActive        Boolean  @default(true)
   foundedYear     Int?
   facultyAdvisorId String?
+  departmentId    String                          // Club must belong to a department
+  approvalStatus  ClubApprovalStatus @default(APPROVED) // PENDING until HOD approves
+  approvedById    String?                         // HOD who approved
+  approvedAt      DateTime?
+  // Enrollment settings
+  autoJoin        Boolean  @default(false)  // If true, students can auto-enroll
+  requireApproval Boolean  @default(true)   // If true, students need club approval to join
   // Club page fields
-  mission         String?   // What the club stands for
-  vision          String?   // Club vision
+  mission         String?
+  vision          String?
   highlights      String?   // JSON string: [{title, description, icon}]
   socialLinks     String?   // JSON string: {instagram, twitter, linkedin, website}
   contactEmail    String?
@@ -101,6 +191,8 @@ model Club {
   updatedAt       DateTime @updatedAt
 
   facultyAdvisor  User?       @relation("FacultyAdvisor", fields: [facultyAdvisorId], references: [id])
+  department      Department  @relation(fields: [departmentId], references: [id])
+  approver        User?       @relation("ClubApprover", fields: [approvedById], references: [id])
   members         ClubMember[]
   events          Event[]
   roles           ClubRole[]
@@ -127,7 +219,7 @@ model ClubRole {
   clubId      String
   name        String   // e.g., "Event Coordinator", "Social Media Manager"
   description String?
-  permissions String   @default("[]") // JSON array: ["EDIT_CLUB_PAGE", "CREATE_CLUB_EVENT", "MANAGE_MEMBERS", "MANAGE_ROLES", "VIEW_ANALYTICS", "MANAGE_ACHIEVEMENTS"]
+  permissions String   @default("[]") // JSON array: ["EDIT_CLUB_PAGE", "CREATE_CLUB_EVENT", "MANAGE_MEMBERS", "MANAGE_ROLES", "VIEW_ANALYTICS", "MANAGE_ACHIEVEMENTS", "ORGANIZE_EVENTS"]
   isDefault   Boolean  @default(false) // Whether this is a system role
   color       String?  // Optional color for badge display
   createdBy   String
@@ -171,6 +263,37 @@ model ClubAchievement {
   creator     User     @relation(fields: [createdBy], references: [id])
 }
 
+// Club creation request - Faculty requests, HOD approves
+model ClubCreationRequest {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String
+  category    EventCategory @default(OTHER)
+  requestedById String
+  departmentId String
+  hodId       String?                         // HOD who will review
+  status      ClubApprovalStatus @default(PENDING)
+  reviewedById String?
+  reviewedAt  DateTime?
+  rejectionReason String?
+  facultyAdvisorId String?
+  autoJoin    Boolean  @default(false)
+  requireApproval Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  requestedBy User     @relation("ClubRequester", fields: [requestedById], references: [id])
+  department  Department @relation(fields: [departmentId], references: [id])
+  reviewedBy  User?    @relation("ClubReviewer", fields: [reviewedById], references: [id])
+}
+
+// ============================================================
+// EVENT MODEL
+// - Can be department-specific (under a department)
+// - Can be under a club
+// - Faculty/HOD approval workflow for event creation
+// ============================================================
+
 model Event {
   id                String       @id @default(cuid())
   title             String
@@ -196,6 +319,8 @@ model Event {
   rejectionReason   String?
   // Event type extension
   eventType         String       @default("GENERAL") // GENERAL, COMPETITION
+  // Department relation for department-wise events
+  departmentId      String?      // If set, this is a department-specific event
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -203,12 +328,14 @@ model Event {
   approver          User?        @relation("EventApprover", fields: [approverId], references: [id])
   club              Club?        @relation(fields: [clubId], references: [id])
   clubId            String?
+  department        Department?  @relation(fields: [departmentId], references: [id])
   registrations     EventRegistration[]
   attendances       Attendance[]
   report            EventReport?
   eventRoles        EventRole[]
   competitionConfig CompetitionConfig?
   teams             Team[]
+  certificates      Certificate[]
 }
 
 model EventRegistration {
@@ -222,6 +349,8 @@ model EventRegistration {
   cancelledAt     DateTime?
   // Team support for competitions
   teamId          String?
+  // Current round for competition tracking
+  currentRoundId  String?            // Which round the participant/team is currently in
 
   event           Event              @relation(fields: [eventId], references: [id])
   user            User               @relation(fields: [userId], references: [id])
@@ -229,6 +358,12 @@ model EventRegistration {
 
   @@unique([eventId, userId])
 }
+
+// ============================================================
+// ATTENDANCE - Enhanced with live geo-tracking
+// Instead of a single check-in, we track location pings
+// Attendance % = time within fence / total event duration
+// ============================================================
 
 model Attendance {
   id              String           @id @default(cuid())
@@ -241,10 +376,30 @@ model Attendance {
   checkInLng      Float?
   isWithinGeoFence Boolean         @default(true)
   notes           String?
+  // Live tracking fields
+  attendancePercentage Float  @default(0)  // % of time within geo-fence
+  lastPingTime    DateTime?                // Last location ping received
+  totalPingsInFence Int     @default(0)   // Total pings within fence
+  totalPings       Int      @default(0)   // Total pings received
+  checkOutTime    DateTime?               // When they left/left the event
 
   registration    EventRegistration @relation(fields: [registrationId], references: [id])
   event           Event            @relation(fields: [eventId], references: [id])
   user            User             @relation(fields: [userId], references: [id])
+}
+
+// Location pings for live tracking
+model LocationPing {
+  id          String   @id @default(cuid())
+  userId      String
+  eventId     String
+  latitude    Float
+  longitude   Float
+  isWithinFence Boolean
+  pingedAt    DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  event       Event    @relation(fields: [eventId], references: [id])
 }
 
 model EventReport {
@@ -272,7 +427,12 @@ model Notification {
   createdAt DateTime @default(now())
 }
 
-// Custom roles for events (evaluators, judges, volunteers, etc.)
+// ============================================================
+// EVENT ROLES & SCORING
+// Faculty/organizer creates judgment parameters for judges
+// Judges score participants on criteria per round
+// ============================================================
+
 model EventRole {
   id           String   @id @default(cuid())
   eventId      String
@@ -289,7 +449,6 @@ model EventRole {
   creator     User               @relation("EventRoleCreator", fields: [createdBy], references: [id])
 }
 
-// Assigning event roles to users
 model EventRoleAssignment {
   id          String   @id @default(cuid())
   eventRoleId String
@@ -333,9 +492,39 @@ model CompetitionRound {
   isElimination       Boolean  @default(false) // Does this round eliminate teams?
   advanceCount        Int?     // How many teams advance (if elimination)
   isActive            Boolean  @default(true)
+  // Scoring visibility - when should judges be able to score?
+  scoringOpen         Boolean  @default(false) // Whether scoring is open for judges
+  scoringDeadline     DateTime? // When scoring closes for this round
   createdAt           DateTime @default(now())
 
   config              CompetitionConfig @relation(fields: [competitionConfigId], references: [id], onDelete: Cascade)
+  scores              Score[]
+  certificates        Certificate[]
+}
+
+// ============================================================
+// SCORING MODEL
+// Each judge scores each participant/team on each criterion per round
+// ============================================================
+
+model Score {
+  id          String   @id @default(cuid())
+  roundId     String
+  judgeId     String   // User who is scoring (must have SCORE_PARTICIPANTS permission)
+  targetId    String   // userId (individual) or teamId being scored
+  targetType  String   @default("INDIVIDUAL") // INDIVIDUAL or TEAM
+  criterionName String  // Name of the criterion from the round's criteria JSON
+  score       Float   // Score given by judge
+  maxScore    Float   // Max possible for this criterion
+  weight      Float   @default(1.0)
+  comments    String? // Judge's comments
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  round       CompetitionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  judge       User             @relation(fields: [judgeId], references: [id])
+
+  @@unique([roundId, judgeId, targetId, criterionName])
 }
 
 // Teams for competition events
@@ -346,6 +535,7 @@ model Team {
   teamCode  String   @unique // Unique join code
   leaderId  String
   status    String   @default("REGISTERED") // REGISTERED, CONFIRMED, ELIMINATED, WINNER
+  currentRoundId String? // Which round the team is currently in
   createdAt DateTime @default(now())
 
   event     Event        @relation(fields: [eventId], references: [id])
@@ -364,4 +554,34 @@ model TeamMember {
   user      User     @relation(fields: [userId], references: [id])
 
   @@unique([teamId, userId])
+}
+
+// ============================================================
+// CERTIFICATE MODEL
+// - Round-based certificates: students in that round get that cert
+// - Round-free certificates: anyone who qualifies gets it
+// - Participation certificates for eliminated teams (default option)
+// - Organizer chooses how many certificate types and for which rounds
+// ============================================================
+
+model Certificate {
+  id              String   @id @default(cuid())
+  eventId         String
+  roundId         String?  // null = event-wide (round-free)
+  userId          String?  // null = template, not yet issued
+  title           String   // e.g., "Participation Certificate", "Winner Certificate"
+  description     String?
+  certificateType CertificateType @default(PARTICIPATION)
+  scope           CertificateScope @default(EVENT_WIDE)
+  // Template fields for generating the certificate
+  templateData    String?  // JSON: {bgColor, logoPosition, textPosition, fontStyle, etc.}
+  issuedAt        DateTime?
+  certificateUrl  String?  // URL to the generated certificate PDF/image
+  // For round-based certs
+  isDefault       Boolean  @default(false) // Automatically issued to all participants in the round
+  createdAt       DateTime @default(now())
+
+  event           Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  round           CompetitionRound?  @relation(fields: [roundId], references: [id])
+  user            User?              @relation(fields: [userId], references: [id])
 }
